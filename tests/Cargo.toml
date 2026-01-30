@@ -1,0 +1,22 @@
+[package]
+name = "meetily-property-tests"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "meetily_property_tests"
+path = "lib.rs"
+
+[dependencies]
+proptest = "1.4"
+serde = { workspace = true }
+serde_json = { workspace = true }
+regex = "1.10"
+walkdir = "2.4"
+
+[dev-dependencies]
+tempfile = "3.8"
+
+[[bin]]
+name = "run_installation_tests"
+path = "bin/run_installation_tests.rs"

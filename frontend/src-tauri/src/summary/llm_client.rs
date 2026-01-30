@@ -73,6 +73,7 @@ pub enum LLMProvider {
     OpenRouter,
     BuiltInAI,
     CustomOpenAI,
+    Gemini,
 }
 
 impl LLMProvider {
@@ -86,6 +87,7 @@ impl LLMProvider {
             "openrouter" => Ok(Self::OpenRouter),
             "builtin-ai" | "local-llama" | "localllama" => Ok(Self::BuiltInAI),
             "custom-openai" => Ok(Self::CustomOpenAI),
+            "gemini" => Ok(Self::Gemini),
             _ => Err(format!("Unsupported LLM provider: {}", s)),
         }
     }
@@ -194,14 +196,18 @@ pub async fn generate_summary(
             );
             ("https://api.anthropic.com/v1/messages".to_string(), header_map)
         }
+        LLMProvider::Gemini => (
+            format!("https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}", model_name, api_key),
+            header::HeaderMap::new(),
+        ),
         LLMProvider::BuiltInAI => {
             // This case is handled earlier with early returns
             unreachable!("BuiltInAI is handled before this match statement")
         }
     };
 
-    // Add authorization header for non-Claude providers
-    if provider != &LLMProvider::Claude {
+    // Add authorization header for non-Claude and non-Gemini providers
+    if provider != &LLMProvider::Claude && provider != &LLMProvider::Gemini {
         headers.insert(
             header::AUTHORIZATION,
             format!("Bearer {}", api_key)
@@ -217,7 +223,31 @@ pub async fn generate_summary(
     );
 
     // Build request body based on provider
-    let request_body = if provider != &LLMProvider::Claude {
+    let request_body = if provider == &LLMProvider::Claude {
+        serde_json::json!(ClaudeRequest {
+            system: system_prompt.to_string(),
+            model: model_name.to_string(),
+            max_tokens: 2048,
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: user_prompt.to_string(),
+            }]
+        })
+    } else if provider == &LLMProvider::Gemini {
+        serde_json::json!({
+            "contents": [{
+                "parts": [{
+                    "text": format!("{}\n\n{}", system_prompt, user_prompt)
+                }]
+            }],
+            "generationConfig": {
+                "temperature": 0.7,
+                "topK": 40,
+                "topP": 0.95,
+                "maxOutputTokens": 2048
+            }
+        })
+    } else {
         // For CustomOpenAI, apply optional parameters if provided
         let (max_tokens_val, temperature_val, top_p_val) = if provider == &LLMProvider::CustomOpenAI {
             (max_tokens, temperature, top_p)
@@ -240,16 +270,6 @@ pub async fn generate_summary(
             max_tokens: max_tokens_val,
             temperature: temperature_val,
             top_p: top_p_val,
-        })
-    } else {
-        serde_json::json!(ClaudeRequest {
-            system: system_prompt.to_string(),
-            model: model_name.to_string(),
-            max_tokens: 2048,
-            messages: vec![ChatMessage {
-                role: "user".to_string(),
-                content: user_prompt.to_string(),
-            }]
         })
     };
 
@@ -313,6 +333,25 @@ pub async fn generate_summary(
             .text
             .trim();
         Ok(content.to_string())
+    } else if provider == &LLMProvider::Gemini {
+        let gemini_response: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse Gemini response: {}", e))?;
+
+        info!("🐞 LLM Response received from Gemini");
+
+        let content = gemini_response
+            .get("candidates")
+            .and_then(|c| c.get(0))
+            .and_then(|c| c.get("content"))
+            .and_then(|c| c.get("parts"))
+            .and_then(|p| p.get(0))
+            .and_then(|p| p.get("text"))
+            .and_then(|t| t.as_str())
+            .ok_or("No content in Gemini response")?
+            .trim();
+        Ok(content.to_string())
     } else {
         let chat_response = response
             .json::<ChatResponse>()
@@ -342,5 +381,6 @@ fn provider_name(provider: &LLMProvider) -> &str {
         LLMProvider::BuiltInAI => "Built-in AI",
         LLMProvider::OpenRouter => "OpenRouter",
         LLMProvider::CustomOpenAI => "Custom OpenAI",
+        LLMProvider::Gemini => "Gemini",
     }
 }

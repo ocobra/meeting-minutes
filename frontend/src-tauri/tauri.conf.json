@@ -98,7 +98,6 @@
             "templates/*.json"
         ],
         "externalBin": [
-            "binaries/llama-helper"
         ],
         "macOS": {
             "entitlements": "entitlements.plist",
