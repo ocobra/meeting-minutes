@@ -1,4 +1,4 @@
-use crate::summary::llm_client::{generate_summary, LLMProvider};
+use crate::summary::llm_client::{generate_summary_with_fallback, LLMProvider};
 use crate::summary::templates;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -227,7 +227,7 @@ pub async fn generate_meeting_summary(
             info!("Processing chunk {}/{}", i + 1, num_chunks);
             let user_prompt_chunk = user_prompt_template_chunk.replace("{}", chunk.as_str());
 
-            match generate_summary(
+            match generate_summary_with_fallback(
                 client,
                 provider,
                 model_name,
@@ -282,7 +282,7 @@ pub async fn generate_meeting_summary(
             let user_prompt_combine_template = "The following are consecutive summaries of a meeting. Combine them into a single, coherent, and detailed narrative summary that retains all important details, organized logically.\n\n<summaries>\n{}\n</summaries>";
 
             let user_prompt_combine = user_prompt_combine_template.replace("{}", &combined_text);
-            generate_summary(
+            generate_summary_with_fallback(
                 client,
                 provider,
                 model_name,
@@ -357,7 +357,7 @@ pub async fn generate_meeting_summary(
         }
     }
 
-    let raw_markdown = generate_summary(
+    let raw_markdown = generate_summary_with_fallback(
         client,
         provider,
         model_name,

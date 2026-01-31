@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
-use tracing::info;
+use tracing::{error, info};
 
 const REQUEST_TIMEOUT_DURATION: Duration = Duration::from_secs(300);
 
@@ -382,5 +382,102 @@ fn provider_name(provider: &LLMProvider) -> &str {
         LLMProvider::OpenRouter => "OpenRouter",
         LLMProvider::CustomOpenAI => "Custom OpenAI",
         LLMProvider::Gemini => "Gemini",
+    }
+}
+
+/// Generate summary with automatic fallback to builtin-ai when primary provider fails with quota/rate limit errors
+/// 
+/// This function wraps the standard generate_summary function with intelligent fallback logic:
+/// 1. Try primary provider (e.g., Gemini)
+/// 2. If quota/rate limit error detected, automatically fallback to builtin-ai/gemma3:1b
+/// 3. Return result from whichever provider succeeds
+pub async fn generate_summary_with_fallback(
+    client: &Client,
+    provider: &LLMProvider,
+    model_name: &str,
+    api_key: &str,
+    system_prompt: &str,
+    user_prompt: &str,
+    ollama_endpoint: Option<&str>,
+    custom_openai_endpoint: Option<&str>,
+    max_tokens: Option<u32>,
+    temperature: Option<f32>,
+    top_p: Option<f32>,
+    app_data_dir: Option<&PathBuf>,
+    cancellation_token: Option<&CancellationToken>,
+) -> Result<String, String> {
+    // First, try the primary provider
+    let primary_result = generate_summary(
+        client,
+        provider,
+        model_name,
+        api_key,
+        system_prompt,
+        user_prompt,
+        ollama_endpoint,
+        custom_openai_endpoint,
+        max_tokens,
+        temperature,
+        top_p,
+        app_data_dir,
+        cancellation_token,
+    ).await;
+
+    match primary_result {
+        Ok(result) => {
+            info!("✅ Primary provider ({}) succeeded", provider_name(provider));
+            Ok(result)
+        }
+        Err(error) => {
+            // Check if this is a quota/rate limit error that should trigger fallback
+            let should_fallback = error.contains("quota") || 
+                                 error.contains("rate limit") || 
+                                 error.contains("429") ||
+                                 error.contains("RESOURCE_EXHAUSTED") ||
+                                 error.contains("exceeded your current quota");
+
+            if should_fallback && provider != &LLMProvider::BuiltInAI {
+                info!("⚠️ Primary provider ({}) failed with quota/rate limit error: {}", provider_name(provider), error);
+                info!("🔄 Attempting fallback to builtin-ai/gemma3:1b...");
+
+                // Ensure we have app_data_dir for builtin-ai
+                if let Some(app_data_dir) = app_data_dir {
+                    // Try fallback with builtin-ai
+                    let fallback_result = generate_summary(
+                        client,
+                        &LLMProvider::BuiltInAI,
+                        "gemma3:1b", // Use the fast 1B model as fallback
+                        "", // No API key needed for builtin-ai
+                        system_prompt,
+                        user_prompt,
+                        None, // No ollama endpoint
+                        None, // No custom openai endpoint
+                        None, // No max tokens
+                        None, // No temperature
+                        None, // No top_p
+                        Some(app_data_dir),
+                        cancellation_token,
+                    ).await;
+
+                    match fallback_result {
+                        Ok(result) => {
+                            info!("✅ Fallback to builtin-ai succeeded! Generated {} characters", result.len());
+                            Ok(format!("⚡ Generated using local AI (Gemma 3 1B) due to API quota limits.\n\n{}", result))
+                        }
+                        Err(fallback_error) => {
+                            error!("❌ Both primary provider and fallback failed. Primary: {} | Fallback: {}", error, fallback_error);
+                            Err(format!("Primary provider failed ({}), fallback also failed ({})", error, fallback_error))
+                        }
+                    }
+                } else {
+                    error!("❌ Cannot fallback to builtin-ai: app_data_dir not provided");
+                    Err(format!("Primary provider failed ({}), cannot fallback without app_data_dir", error))
+                }
+            } else {
+                // Not a quota error, or already using builtin-ai, return original error
+                error!("❌ Primary provider ({}) failed: {}", provider_name(provider), error);
+                Err(error)
+            }
+        }
     }
 }
