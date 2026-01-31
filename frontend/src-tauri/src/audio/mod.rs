@@ -25,6 +25,9 @@ pub mod recording_saver;
 pub mod incremental_saver;  // NEW: Incremental audio saving with checkpoints
 pub mod level_monitor;
 pub mod simple_level_monitor;
+
+#[cfg(test)]
+mod test_checkpoint_creation;
 pub mod buffer_pool;
 pub mod post_processor;
 pub mod hardware_detector;
@@ -70,7 +73,7 @@ pub use system_audio_commands::{
 pub use recording_state::{RecordingState, AudioChunk, ProcessedAudioChunk, AudioError, DeviceType as RecordingDeviceType};
 pub use pipeline::{AudioPipelineManager};
 pub use stream::{AudioStreamManager};
-pub use recording_manager::{RecordingManager};
+pub use recording_manager::{RecordingManager, RecordingPipeline};
 pub use recording_commands::{
     start_recording, start_recording_with_devices, stop_recording,
     is_recording, get_transcription_status, RecordingArgs, TranscriptionStatus, TranscriptUpdate

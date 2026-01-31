@@ -45,6 +45,7 @@ pub mod ollama;
 pub mod onboarding;
 pub mod openrouter;
 pub mod parakeet_engine;
+pub mod recording;
 pub mod state;
 pub mod summary;
 pub mod tray;
@@ -654,6 +655,9 @@ pub fn run() {
             openrouter::get_openrouter_models,
             audio::recording_preferences::get_recording_preferences,
             audio::recording_preferences::set_recording_preferences,
+            audio::recording_preferences::set_recording_preferences_with_rollback,
+            audio::recording_preferences::repair_recording_preferences,
+            audio::recording_preferences::validate_recording_preferences,
             audio::recording_preferences::get_default_recordings_folder_path,
             audio::recording_preferences::open_recordings_folder,
             audio::recording_preferences::select_recording_folder,
@@ -710,6 +714,13 @@ pub fn run() {
             // System settings commands
             #[cfg(target_os = "macos")]
             utils::open_system_settings,
+            // Recording diagnostic commands
+            recording::diagnostic_commands::run_recording_diagnostics,
+            recording::diagnostic_commands::trace_auto_save_parameter,
+            recording::diagnostic_commands::scan_hardcoded_values,
+            recording::diagnostic_commands::check_ffmpeg_dependency,
+            recording::diagnostic_commands::check_filesystem_status,
+            recording::diagnostic_commands::get_diagnostic_summary,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

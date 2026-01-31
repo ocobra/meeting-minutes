@@ -42,14 +42,65 @@ pub fn create_meeting_folder(
     let folder_name = format!("{}_{}", sanitized_name, timestamp);
     let meeting_folder = base_path.join(folder_name);
 
-    // Create main meeting folder
-    std::fs::create_dir_all(&meeting_folder)?;
+    // Create main meeting folder with enhanced error handling
+    std::fs::create_dir_all(&meeting_folder)
+        .map_err(|e| anyhow::anyhow!(
+            "Failed to create meeting folder '{}': {}. Check permissions and disk space.", 
+            meeting_folder.display(), e
+        ))?;
 
     // Only create .checkpoints subdirectory if requested (when auto_save is true)
     if create_checkpoints_dir {
         let checkpoints_dir = meeting_folder.join(".checkpoints");
-        std::fs::create_dir_all(&checkpoints_dir)?;
-        log::info!("Created meeting folder with checkpoints: {}", meeting_folder.display());
+        
+        // Enhanced checkpoint directory creation with retry logic
+        let mut attempts = 0;
+        const MAX_ATTEMPTS: u32 = 3;
+        
+        loop {
+            attempts += 1;
+            
+            match std::fs::create_dir_all(&checkpoints_dir) {
+                Ok(()) => {
+                    // Verify directory was actually created and is writable
+                    if !checkpoints_dir.exists() {
+                        return Err(anyhow::anyhow!(
+                            "Checkpoints directory was not created: {}. This may indicate a filesystem issue.",
+                            checkpoints_dir.display()
+                        ));
+                    }
+                    
+                    // Test write permissions by creating and removing a test file
+                    let test_file = checkpoints_dir.join(".write_test");
+                    match std::fs::write(&test_file, b"test") {
+                        Ok(()) => {
+                            let _ = std::fs::remove_file(&test_file); // Clean up test file
+                            log::info!("✅ Created meeting folder with checkpoints: {}", meeting_folder.display());
+                            break;
+                        }
+                        Err(e) => {
+                            return Err(anyhow::anyhow!(
+                                "Checkpoints directory '{}' is not writable: {}. Check folder permissions.",
+                                checkpoints_dir.display(), e
+                            ));
+                        }
+                    }
+                }
+                Err(e) if attempts < MAX_ATTEMPTS => {
+                    warn!("Failed to create checkpoints directory (attempt {}/{}): {}. Retrying...", 
+                          attempts, MAX_ATTEMPTS, e);
+                    std::thread::sleep(std::time::Duration::from_millis(100 * attempts as u64));
+                    continue;
+                }
+                Err(e) => {
+                    return Err(anyhow::anyhow!(
+                        "Failed to create checkpoints directory '{}' after {} attempts: {}. \
+                         This is required for MP4 recording. Check permissions, disk space, and that the parent folder is writable.",
+                        checkpoints_dir.display(), MAX_ATTEMPTS, e
+                    ));
+                }
+            }
+        }
     } else {
         log::info!("Created meeting folder without checkpoints: {}", meeting_folder.display());
     }

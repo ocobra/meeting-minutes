@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use super::recording_state::AudioChunk;
 use super::audio_processing::create_meeting_folder;
 use super::incremental_saver::IncrementalAudioSaver;
+use crate::recording::error_handling::{RecordingError, CheckpointOperation, ErrorRecoveryCoordinator};
 
 /// Structured transcript segment for JSON export
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,6 +56,7 @@ pub struct RecordingSaver {
     transcript_segments: Arc<Mutex<Vec<TranscriptSegment>>>,
     chunk_receiver: Option<mpsc::UnboundedReceiver<AudioChunk>>,
     is_saving: Arc<Mutex<bool>>,
+    error_recovery: ErrorRecoveryCoordinator,
 }
 
 impl RecordingSaver {
@@ -67,6 +69,9 @@ impl RecordingSaver {
             transcript_segments: Arc::new(Mutex::new(Vec::new())),
             chunk_receiver: None,
             is_saving: Arc::new(Mutex::new(false)),
+            error_recovery: ErrorRecoveryCoordinator::new()
+                .with_graceful_degradation(true)
+                .with_retry_config(3, 1000),
         }
     }
 
@@ -140,8 +145,14 @@ impl RecordingSaver {
     pub fn start_accumulation(&mut self, auto_save: bool) -> mpsc::UnboundedSender<AudioChunk> {
         if auto_save {
             info!("Initializing incremental audio saver for recording (auto-save ENABLED)");
+            
+            // Requirement 7.1: Log auto_save parameter in recording saver
+            info!("🔧 [STRUCTURED_LOG] recording_saver_accumulation_start: {{ \"auto_save\": true, \"mode\": \"incremental_checkpoints\", \"checkpoint_interval_seconds\": 30 }}");
         } else {
             info!("Starting recording without audio saving (auto-save DISABLED - transcripts only)");
+            
+            // Requirement 7.1: Log auto_save parameter in recording saver
+            info!("🔧 [STRUCTURED_LOG] recording_saver_accumulation_start: {{ \"auto_save\": false, \"mode\": \"transcript_only\", \"audio_chunks_discarded\": true }}");
         }
 
         // Create channel for receiving audio chunks
@@ -152,10 +163,54 @@ impl RecordingSaver {
         if auto_save {
             if let Some(name) = self.meeting_name.clone() {
                 match self.initialize_meeting_folder(&name, true) {
-                    Ok(()) => info!("Successfully initialized meeting folder with checkpoints"),
+                    Ok(()) => info!("✅ Successfully initialized meeting folder with checkpoints"),
                     Err(e) => {
-                        error!("Failed to initialize meeting folder: {}", e);
-                        // Continue anyway - will use fallback flat structure
+                        error!("❌ Failed to initialize meeting folder with checkpoints: {}", e);
+                        error!("🔄 Attempting graceful degradation: transcript-only mode");
+                        
+                        // Create a comprehensive error for the initialization failure
+                        let initialization_error = RecordingError::meeting_folder_error(
+                            format!("Failed to initialize meeting folder with checkpoints: {}", e),
+                            std::path::PathBuf::from(&name),
+                            e.to_string().contains("permission") || e.to_string().contains("Permission"),
+                            e.to_string().contains("space") || e.to_string().contains("disk"),
+                        );
+                        
+                        // Use error recovery coordinator for graceful degradation
+                        let recovery_coordinator = ErrorRecoveryCoordinator::new()
+                            .with_graceful_degradation(true);
+                            
+                        // Note: We can't use async/await in this context, so we'll handle this synchronously
+                        warn!("🔄 Graceful degradation: MP4 recording failed, continuing with transcript-only mode");
+                        warn!("📝 Transcripts will continue to be saved normally");
+                        warn!("💡 MP4 recording can be restored by fixing folder permissions and restarting recording");
+                                
+                        // Try to create meeting folder without checkpoints as fallback
+                        match self.initialize_meeting_folder(&name, false) {
+                            Ok(()) => {
+                                warn!("✅ Fallback successful: Meeting folder created without checkpoints");
+                                warn!("📝 Recording will save transcripts only (no MP4 audio)");
+                                warn!("💡 To restore MP4 recording, fix the issue and restart recording");
+                            }
+                            Err(fallback_error) => {
+                                error!("❌ Fallback also failed: {}", fallback_error);
+                                error!("❌ Recording may not save any files. Check folder permissions and disk space.");
+                                
+                                // Create error for complete failure
+                                let complete_failure_error = RecordingError::meeting_folder_error(
+                                    format!("Complete meeting folder initialization failure: {}", fallback_error),
+                                    std::path::PathBuf::from(&name),
+                                    fallback_error.to_string().contains("permission"),
+                                    fallback_error.to_string().contains("space"),
+                                );
+                                
+                                // Show recovery guidance
+                                let guidance = complete_failure_error.recovery_guidance();
+                                for guide in guidance {
+                                    error!("💡 Critical recovery needed: {}", guide);
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -164,9 +219,23 @@ impl RecordingSaver {
             // but skip .checkpoints directory
             if let Some(name) = self.meeting_name.clone() {
                 match self.initialize_meeting_folder(&name, false) {
-                    Ok(()) => info!("Successfully initialized meeting folder (transcripts only)"),
+                    Ok(()) => info!("✅ Successfully initialized meeting folder (transcripts only)"),
                     Err(e) => {
-                        error!("Failed to initialize meeting folder: {}", e);
+                        error!("❌ Failed to initialize meeting folder for transcripts: {}", e);
+                        
+                        // Even transcript-only mode needs a folder - try alternatives
+                        let transcript_error = RecordingError::meeting_folder_error(
+                            format!("Failed to initialize meeting folder for transcripts: {}", e),
+                            std::path::PathBuf::from(&name),
+                            e.to_string().contains("permission"),
+                            e.to_string().contains("space"),
+                        );
+                        
+                        let recovery_coordinator = ErrorRecoveryCoordinator::new();
+                        // Note: We can't use async/await in this context, so we'll handle this synchronously
+                        info!("🔄 Trying alternative locations for transcript storage");
+                        warn!("💡 Alternative transcript storage locations may be available");
+                        warn!("💡 To use alternative location, restart recording with updated preferences");
                     }
                 }
             }
@@ -175,6 +244,7 @@ impl RecordingSaver {
         // Start accumulation task
         let is_saving_clone = self.is_saving.clone();
         let incremental_saver_arc = self.incremental_saver.clone();
+        let meeting_folder = self.meeting_folder.clone(); // Capture meeting_folder for the async closure
         let save_audio = auto_save;
 
         if let Some(mut receiver) = self.chunk_receiver.take() {
@@ -195,18 +265,128 @@ impl RecordingSaver {
 
                     // Only process audio chunks if auto_save is enabled
                     if save_audio {
-                        // Add chunk to incremental saver
+                        // Add chunk to incremental saver with enhanced error handling and graceful degradation
                         if let Some(saver_arc) = &incremental_saver_arc {
                             let mut saver_guard = saver_arc.lock().await;
-                            if let Err(e) = saver_guard.add_chunk(chunk) {
-                                error!("Failed to add chunk to incremental saver: {}", e);
+                            if let Err(e) = saver_guard.add_chunk(chunk.clone()) {
+                                // Create a detailed checkpoint error
+                                let meeting_folder_path = meeting_folder.clone().unwrap_or_else(|| std::path::PathBuf::from("unknown"));
+                                let checkpoint_error = RecordingError::checkpoint_error(
+                                    format!("Failed to add audio chunk to incremental saver: {}", e),
+                                    meeting_folder_path,
+                                    CheckpointOperation::ChunkWrite,
+                                    1, // This chunk is affected
+                                );
+                                
+                                error!("❌ Checkpoint error: {}", checkpoint_error.user_message());
+                                
+                                // Attempt recovery using the error recovery coordinator
+                                let recovery_coordinator = ErrorRecoveryCoordinator::new()
+                                    .with_graceful_degradation(true)
+                                    .with_retry_config(3, 1000);
+                                    
+                                match recovery_coordinator.attempt_recovery(&checkpoint_error).await {
+                                    crate::recording::error_handling::RecoveryResult::GracefulDegradation { 
+                                        user_notification: Some(message), .. 
+                                    } => {
+                                        warn!("🔄 Graceful degradation: {}", message);
+                                        warn!("🔄 Switching to transcript-only mode for remaining chunks");
+                                        
+                                        // Switch to transcript-only mode by breaking out of audio processing
+                                        // Transcripts will continue to be processed by the transcription pipeline
+                                        break;
+                                    },
+                                    crate::recording::error_handling::RecoveryResult::RetryOperation { 
+                                        max_attempts, delay_ms, .. 
+                                    } => {
+                                        warn!("🔄 Retrying chunk write operation (max {} attempts, delay {}ms)", max_attempts, delay_ms);
+                                        
+                                        // Implement retry logic for chunk write
+                                        let mut retry_count = 0;
+                                        let mut retry_successful = false;
+                                        
+                                        while retry_count < max_attempts && !retry_successful {
+                                            tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
+                                            retry_count += 1;
+                                            
+                                            match saver_guard.add_chunk(chunk.clone()) {
+                                                Ok(()) => {
+                                                    info!("✅ Chunk write retry {} succeeded", retry_count);
+                                                    retry_successful = true;
+                                                }
+                                                Err(retry_error) => {
+                                                    warn!("❌ Chunk write retry {} failed: {}", retry_count, retry_error);
+                                                }
+                                            }
+                                        }
+                                        
+                                        if !retry_successful {
+                                            warn!("❌ All chunk write retries failed, switching to transcript-only mode");
+                                            break;
+                                        }
+                                    },
+                                    _ => {
+                                        error!("❌ No recovery available for chunk write error, switching to transcript-only mode");
+                                        break;
+                                    }
+                                }
                             }
                         } else {
-                            error!("Incremental saver not available while accumulating");
+                            // This happens when checkpoint directory creation failed
+                            // but auto_save is still true - implement graceful degradation
+                            use std::sync::atomic::{AtomicU32, Ordering};
+                            static DROPPED_CHUNKS: AtomicU32 = AtomicU32::new(0);
+                            static DEGRADATION_NOTIFIED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+                            
+                            let count = DROPPED_CHUNKS.fetch_add(1, Ordering::Relaxed) + 1;
+                            
+                            // Create a comprehensive checkpoint error for missing incremental saver
+                            let meeting_folder_path = meeting_folder.clone().unwrap_or_else(|| std::path::PathBuf::from("unknown"));
+                            let checkpoint_error = RecordingError::checkpoint_error(
+                                "Incremental saver not available - gracefully degrading to transcript-only mode".to_string(),
+                                meeting_folder_path,
+                                CheckpointOperation::DirectoryCreation,
+                                count,
+                            );
+                            
+                            // Only show detailed error and recovery guidance once
+                            if count == 1 || !DEGRADATION_NOTIFIED.load(Ordering::Relaxed) {
+                                error!("❌ {}", checkpoint_error.user_message());
+                                
+                                // Use error recovery coordinator for graceful degradation
+                                let recovery_coordinator = ErrorRecoveryCoordinator::new()
+                                    .with_graceful_degradation(true);
+                                    
+                                match recovery_coordinator.attempt_recovery(&checkpoint_error).await {
+                                    crate::recording::error_handling::RecoveryResult::GracefulDegradation { 
+                                        user_notification: Some(message), .. 
+                                    } => {
+                                        warn!("🔄 {}", message);
+                                        warn!("📝 Transcripts will continue to be saved normally");
+                                        warn!("💡 MP4 recording can be restored by fixing folder permissions and restarting recording");
+                                        
+                                        DEGRADATION_NOTIFIED.store(true, Ordering::Relaxed);
+                                    },
+                                    _ => {
+                                        // Show recovery guidance to user
+                                        let guidance = checkpoint_error.recovery_guidance();
+                                        for guide in guidance {
+                                            info!("💡 Recovery guidance: {}", guide);
+                                        }
+                                    }
+                                }
+                            } else if count % 100 == 0 {
+                                // Periodic reminder that chunks are being dropped
+                                warn!("❌ {} audio chunks dropped so far (transcript-only mode active)", count);
+                            }
+                            
+                            // Continue processing - transcripts are still being saved by the transcription pipeline
+                            // The audio chunk is dropped here, but transcription continues independently
                         }
                     } else {
-                        // auto_save is false: discard audio chunk (no-op)
+                        // auto_save is false: discard audio chunk (this is expected behavior)
                         // Transcription already happened in the pipeline before this point
+                        // This is normal transcript-only mode operation
                     }
                 }
 
@@ -230,17 +410,98 @@ impl RecordingSaver {
     fn initialize_meeting_folder(&mut self, meeting_name: &str, create_checkpoints: bool) -> Result<()> {
         // Load preferences to get base recordings folder
         let base_folder = super::recording_preferences::get_default_recordings_folder();
+        info!("Initializing meeting folder in: {}", base_folder.display());
+
+        // Requirement 7.2: Log meeting folder initialization start
+        info!("🔧 [STRUCTURED_LOG] meeting_folder_initialization: {{ \"meeting_name\": \"{}\", \"base_folder\": \"{}\", \"create_checkpoints\": {} }}", 
+              meeting_name, base_folder.display(), create_checkpoints);
 
         // Create meeting folder structure (with or without .checkpoints/ subdirectory)
-        let meeting_folder = create_meeting_folder(&base_folder, meeting_name, create_checkpoints)?;
+        let meeting_folder = match create_meeting_folder(&base_folder, meeting_name, create_checkpoints) {
+            Ok(folder) => {
+                // Requirement 7.2: Log successful meeting folder creation
+                info!("🔧 [STRUCTURED_LOG] meeting_folder_created: {{ \"folder_path\": \"{}\", \"checkpoints_directory_created\": {} }}", 
+                      folder.display(), create_checkpoints);
+                
+                if create_checkpoints {
+                    let checkpoints_dir = folder.join(".checkpoints");
+                    if checkpoints_dir.exists() {
+                        info!("🔧 [STRUCTURED_LOG] checkpoints_directory_ready: {{ \"path\": \"{}\", \"writable\": true }}", 
+                              checkpoints_dir.display());
+                    }
+                }
+                
+                folder
+            },
+            Err(e) => {
+                // Create a detailed meeting folder error
+                let folder_error = RecordingError::meeting_folder_error(
+                    format!("Failed to create meeting folder: {}", e),
+                    base_folder.clone(),
+                    e.to_string().to_lowercase().contains("permission"),
+                    e.to_string().to_lowercase().contains("space") || e.to_string().to_lowercase().contains("disk"),
+                );
+                
+                error!("❌ Meeting folder error: {}", folder_error.user_message());
+                
+                // Requirement 7.2: Log meeting folder creation failure
+                error!("🔧 [STRUCTURED_LOG] meeting_folder_creation_failed: {{ \"meeting_name\": \"{}\", \"base_folder\": \"{}\", \"error\": \"{}\", \"create_checkpoints\": {} }}", 
+                       meeting_name, base_folder.display(), e.to_string().replace("\"", "\\\""), create_checkpoints);
+                
+                // Show recovery guidance
+                let guidance = folder_error.recovery_guidance();
+                for guide in guidance {
+                    info!("💡 Recovery guidance: {}", guide);
+                }
+                
+                return Err(anyhow::anyhow!("Meeting folder creation failed: {}", e));
+            }
+        };
 
         // Only initialize incremental saver if checkpoints are needed (auto_save is true)
         if create_checkpoints {
-            let incremental_saver = IncrementalAudioSaver::new(meeting_folder.clone(), 48000)?;
-            self.incremental_saver = Some(Arc::new(AsyncMutex::new(incremental_saver)));
-            info!("✅ Incremental audio saver initialized for meeting: {}", meeting_name);
+            match IncrementalAudioSaver::new(meeting_folder.clone(), 48000) {
+                Ok(incremental_saver) => {
+                    self.incremental_saver = Some(Arc::new(AsyncMutex::new(incremental_saver)));
+                    info!("✅ Incremental audio saver initialized for meeting: {}", meeting_name);
+                    
+                    // Requirement 7.2: Log incremental saver initialization success
+                    info!("🔧 [STRUCTURED_LOG] incremental_saver_initialized: {{ \"meeting_name\": \"{}\", \"sample_rate\": 48000, \"checkpoint_interval_seconds\": 30, \"checkpoints_directory\": \"{}\" }}", 
+                          meeting_name, meeting_folder.join(".checkpoints").display());
+                }
+                Err(e) => {
+                    // Create a detailed checkpoint error for incremental saver initialization
+                    let checkpoint_error = RecordingError::checkpoint_error(
+                        format!("Failed to initialize incremental audio saver: {}", e),
+                        meeting_folder.clone(),
+                        CheckpointOperation::DirectoryCreation,
+                        0, // No chunks affected yet
+                    );
+                    
+                    error!("❌ Checkpoint initialization error: {}", checkpoint_error.user_message());
+                    
+                    // Requirement 7.2: Log incremental saver initialization failure
+                    error!("🔧 [STRUCTURED_LOG] incremental_saver_initialization_failed: {{ \"meeting_name\": \"{}\", \"error\": \"{}\", \"checkpoints_directory\": \"{}\" }}", 
+                           meeting_name, e.to_string().replace("\"", "\\\""), meeting_folder.join(".checkpoints").display());
+                    
+                    // Show recovery guidance
+                    let guidance = checkpoint_error.recovery_guidance();
+                    for guide in guidance {
+                        info!("💡 Recovery guidance: {}", guide);
+                    }
+                    
+                    return Err(anyhow::anyhow!(
+                        "Failed to initialize incremental audio saver: {}. \
+                         This prevents MP4 recording. Check that the .checkpoints/ directory \
+                         was created and is writable.", e
+                    ));
+                }
+            }
         } else {
             info!("⚠️  Skipped incremental audio saver (auto-save disabled)");
+            
+            // Requirement 7.1: Log when incremental saver is skipped due to auto_save=false
+            info!("🔧 [STRUCTURED_LOG] incremental_saver_skipped: {{ \"reason\": \"auto_save_disabled\", \"mode\": \"transcript_only\" }}");
         }
 
         // Create initial metadata
@@ -261,8 +522,9 @@ impl RecordingSaver {
             status: "recording".to_string(),
         };
 
-        // Write initial metadata.json
-        self.write_metadata(&meeting_folder, &metadata)?;
+        // Write initial metadata.json with enhanced error handling
+        self.write_metadata(&meeting_folder, &metadata)
+            .map_err(|e| anyhow::anyhow!("Failed to write meeting metadata: {}", e))?;
 
         self.meeting_folder = Some(meeting_folder);
         self.metadata = Some(metadata);

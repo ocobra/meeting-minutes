@@ -34,10 +34,39 @@ impl IncrementalAudioSaver {
     pub fn new(meeting_folder: PathBuf, sample_rate: u32) -> Result<Self> {
         let checkpoints_dir = meeting_folder.join(".checkpoints");
 
-        // Verify checkpoints directory exists
+        // Enhanced checkpoint directory validation with automatic creation as fallback
         if !checkpoints_dir.exists() {
-            return Err(anyhow!("Checkpoints directory does not exist: {}", checkpoints_dir.display()));
+            warn!("Checkpoints directory does not exist: {}. Attempting to create it...", checkpoints_dir.display());
+            
+            // Try to create the directory as a fallback
+            match std::fs::create_dir_all(&checkpoints_dir) {
+                Ok(()) => {
+                    info!("✅ Successfully created missing checkpoints directory: {}", checkpoints_dir.display());
+                }
+                Err(e) => {
+                    return Err(anyhow!(
+                        "Checkpoints directory does not exist and cannot be created: {}. Error: {}. \
+                         This is required for MP4 recording with auto_save=true. \
+                         Please check folder permissions and disk space.",
+                        checkpoints_dir.display(), e
+                    ));
+                }
+            }
         }
+
+        // Verify the directory is writable
+        let test_file = checkpoints_dir.join(".write_test");
+        if let Err(e) = std::fs::write(&test_file, b"test") {
+            return Err(anyhow!(
+                "Checkpoints directory '{}' is not writable: {}. \
+                 Please check folder permissions.",
+                checkpoints_dir.display(), e
+            ));
+        }
+        // Clean up test file
+        let _ = std::fs::remove_file(&test_file);
+
+        info!("✅ Incremental audio saver initialized with checkpoints directory: {}", checkpoints_dir.display());
 
         Ok(Self {
             checkpoint_buffer: Vec::new(),
@@ -101,12 +130,27 @@ impl IncrementalAudioSaver {
         )?;
 
         let duration_seconds = audio_data.len() as f32 / self.sample_rate as f32;
+        
+        // Get file size for logging
+        let file_size_bytes = std::fs::metadata(&checkpoint_path)
+            .map(|metadata| metadata.len())
+            .unwrap_or(0);
+        
         self.checkpoint_count += 1;
 
         info!("Saved checkpoint {}: {:.2}s of audio ({} samples)",
               self.checkpoint_count,
               duration_seconds,
               audio_data.len());
+
+        // Requirement 7.2: Log checkpoint file creation with paths and sizes
+        info!("🔧 [STRUCTURED_LOG] checkpoint_created: {{ \"checkpoint_number\": {}, \"file_path\": \"{}\", \"file_size_bytes\": {}, \"duration_seconds\": {:.2}, \"sample_count\": {}, \"sample_rate\": {} }}", 
+              self.checkpoint_count,
+              checkpoint_path.display(),
+              file_size_bytes,
+              duration_seconds,
+              audio_data.len(),
+              self.sample_rate);
 
         Ok(())
     }
@@ -433,10 +477,12 @@ mod tests {
         ).unwrap();
 
         // Add 60 seconds worth of audio (should create 2 checkpoints)
-        for _ in 0..120 {  // 120 chunks of 0.5s each
+        for i in 0..120 {  // 120 chunks of 0.5s each
             let chunk = AudioChunk {
                 data: vec![0.5f32; 24000],  // 0.5s at 48kHz
                 sample_rate: 48000,
+                timestamp: i as f64 * 0.5,  // 0.5s intervals
+                chunk_id: i as u64,
                 device_type: DeviceType::Microphone,
             };
             saver.add_chunk(chunk).unwrap();

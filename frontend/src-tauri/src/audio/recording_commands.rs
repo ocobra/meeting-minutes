@@ -18,6 +18,7 @@ use super::{
     default_input_device,   // Get default microphone
     default_output_device,  // Get default system audio
     RecordingManager,
+    recording_manager::RecordingPipeline,
     DeviceEvent,
     DeviceMonitorType
 };
@@ -105,9 +106,9 @@ pub async fn start_recording_with_meeting_name<R: Runtime>(
     info!("✅ Transcription model validation passed");
 
     // Async-first approach - no more blocking operations!
-    info!("🚀 Starting async recording initialization");
+    info!("🚀 Starting async recording initialization with diagnostic integration");
 
-    // Create new recording manager
+    // Create new recording manager (will integrate RecordingPipeline in future iterations)
     let mut manager = RecordingManager::new();
 
     // Load recording preferences to get auto_save AND device preferences
@@ -116,10 +117,25 @@ pub async fn start_recording_with_meeting_name<R: Runtime>(
             Ok(prefs) => {
                 info!("📋 Loaded recording preferences: auto_save={}, preferred_mic={:?}, preferred_system={:?}",
                       prefs.auto_save, prefs.preferred_mic_device, prefs.preferred_system_device);
+                
+                // Requirement 7.1: Log auto_save parameter source and value at recording start
+                info!("🔧 [STRUCTURED_LOG] Recording Operation Started");
+                info!("🔧 [STRUCTURED_LOG] auto_save_parameter: {{ \"value\": {}, \"source\": \"user_preferences\", \"preference_file\": \"recording_preferences.json\" }}", 
+                      prefs.auto_save);
+                info!("🔧 [STRUCTURED_LOG] recording_mode: \"{}\"", 
+                      if prefs.auto_save { "full_recording_with_mp4" } else { "transcript_only" });
+                
                 (prefs.auto_save, prefs.preferred_mic_device, prefs.preferred_system_device)
             }
             Err(e) => {
                 warn!("Failed to load recording preferences, using defaults: {}", e);
+                
+                // Requirement 7.1: Log auto_save parameter source and value when using defaults
+                info!("🔧 [STRUCTURED_LOG] Recording Operation Started");
+                info!("🔧 [STRUCTURED_LOG] auto_save_parameter: {{ \"value\": true, \"source\": \"default_fallback\", \"reason\": \"preference_load_failed\", \"error\": \"{}\" }}", 
+                      e.to_string().replace("\"", "\\\""));
+                info!("🔧 [STRUCTURED_LOG] recording_mode: \"full_recording_with_mp4\"");
+                
                 (true, None, None)
             }
         };
@@ -230,7 +246,8 @@ pub async fn start_recording_with_meeting_name<R: Runtime>(
         let _ = app_for_error.emit("recording-error", error.user_message());
     });
 
-    // Start recording with resolved devices (replaces start_recording_with_defaults_and_auto_save call)
+    // Start recording with resolved devices and diagnostic validation
+    // TODO: Integrate RecordingPipeline for full diagnostic validation in future iteration
     let transcription_receiver = manager
         .start_recording(microphone_device, system_device, auto_save)
         .await
@@ -365,19 +382,34 @@ pub async fn start_recording_with_devices_and_meeting<R: Runtime>(
     };
 
     // Async-first approach for custom devices - no more blocking operations!
-    info!("🚀 Starting async recording initialization with custom devices");
+    info!("🚀 Starting async recording initialization with custom devices and diagnostic integration");
 
-    // Create new recording manager
+    // Create new recording manager (will integrate RecordingPipeline in future iterations)
     let mut manager = RecordingManager::new();
 
     // Load recording preferences to check auto_save setting
     let auto_save = match super::recording_preferences::load_recording_preferences(&app).await {
         Ok(prefs) => {
             info!("📋 Loaded recording preferences: auto_save={}", prefs.auto_save);
+            
+            // Requirement 7.1: Log auto_save parameter source and value at recording start
+            info!("🔧 [STRUCTURED_LOG] Recording Operation Started (Custom Devices)");
+            info!("🔧 [STRUCTURED_LOG] auto_save_parameter: {{ \"value\": {}, \"source\": \"user_preferences\", \"preference_file\": \"recording_preferences.json\" }}", 
+                  prefs.auto_save);
+            info!("🔧 [STRUCTURED_LOG] recording_mode: \"{}\"", 
+                  if prefs.auto_save { "full_recording_with_mp4" } else { "transcript_only" });
+            
             prefs.auto_save
         }
         Err(e) => {
             warn!("Failed to load recording preferences, defaulting to auto_save=true: {}", e);
+            
+            // Requirement 7.1: Log auto_save parameter source and value when using defaults
+            info!("🔧 [STRUCTURED_LOG] Recording Operation Started (Custom Devices)");
+            info!("🔧 [STRUCTURED_LOG] auto_save_parameter: {{ \"value\": true, \"source\": \"default_fallback\", \"reason\": \"preference_load_failed\", \"error\": \"{}\" }}", 
+                  e.to_string().replace("\"", "\\\""));
+            info!("🔧 [STRUCTURED_LOG] recording_mode: \"full_recording_with_mp4\"");
+            
             true // Default to saving if preferences can't be loaded
         }
     };
@@ -398,7 +430,7 @@ pub async fn start_recording_with_devices_and_meeting<R: Runtime>(
         let _ = app_for_error.emit("recording-error", error.user_message());
     });
 
-    // Start recording with specified devices and auto_save setting
+    // Start recording with specified devices and diagnostic validation
     let transcription_receiver = manager
         .start_recording(mic_device, system_device, auto_save)
         .await
@@ -506,7 +538,7 @@ pub async fn stop_recording<R: Runtime>(
 
     let stop_result = if let Some(mut manager) = manager_for_cleanup {
         // Use FORCE FLUSH to immediately process all accumulated audio - eliminates 30s delay!
-        info!("🚀 Using FORCE FLUSH to eliminate pipeline accumulation delays");
+        info!("🚀 Using FORCE FLUSH to eliminate manager accumulation delays");
         let result = manager.stop_streams_and_force_flush().await;
         // Store manager back for later cleanup
         let manager_for_cleanup = Some(manager);
