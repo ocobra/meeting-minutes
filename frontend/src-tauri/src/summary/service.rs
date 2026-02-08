@@ -3,6 +3,7 @@ use crate::database::repositories::{
 };
 use crate::summary::llm_client::LLMProvider;
 use crate::summary::processor::{extract_meeting_name_from_markdown, generate_meeting_summary};
+use crate::utils::timestamp_formatter::{format_timestamp_for_summary, utc_to_local};
 use crate::ollama::metadata::ModelMetadataCache;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
@@ -219,6 +220,33 @@ impl SummaryService {
         // Get app data directory for BuiltInAI provider
         let app_data_dir = _app.path().app_data_dir().ok();
 
+        // Fetch meeting metadata to get created_at timestamp
+        let meeting_metadata = match MeetingsRepository::get_meeting_metadata(&pool, &meeting_id).await {
+            Ok(Some(metadata)) => metadata,
+            Ok(None) => {
+                let err_msg = format!("Meeting not found: {}", meeting_id);
+                Self::update_process_failed(&pool, &meeting_id, &err_msg).await;
+                return;
+            }
+            Err(e) => {
+                let err_msg = format!("Failed to fetch meeting metadata: {}", e);
+                Self::update_process_failed(&pool, &meeting_id, &err_msg).await;
+                return;
+            }
+        };
+
+        // Format timestamp for summary
+        let local_time = utc_to_local(&meeting_metadata.created_at.0);
+        let timestamp_str = format_timestamp_for_summary(&local_time);
+        
+        // Inject timestamp into prompt (prepend to custom_prompt)
+        let timestamp_context = format!("Meeting Date and Time: {}\n\n", timestamp_str);
+        let enhanced_prompt = if custom_prompt.is_empty() {
+            timestamp_context
+        } else {
+            format!("{}{}", timestamp_context, custom_prompt)
+        };
+
         // Generate summary
         let client = reqwest::Client::new();
         let result = generate_meeting_summary(
@@ -227,7 +255,7 @@ impl SummaryService {
             &model_name,
             &final_api_key,
             &text,
-            &custom_prompt,
+            &enhanced_prompt,  // Use enhanced prompt with timestamp
             &template_id,
             token_threshold,
             ollama_endpoint.as_deref(),
