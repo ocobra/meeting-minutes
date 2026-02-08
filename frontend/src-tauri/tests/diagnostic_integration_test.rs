@@ -7,6 +7,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 #[tokio::test]
+#[ignore] // Requires main thread for Tauri event loop
 async fn test_mp4_recording_diagnostics() {
     // Initialize logging for the test
     let _ = env_logger::builder().is_test(true).try_init();

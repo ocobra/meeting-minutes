@@ -3,7 +3,7 @@
 //! This example demonstrates how to use the diagnostic engine to identify
 //! issues with MP4 recording functionality.
 
-use crate::recording::diagnostic_commands;
+use app_lib::recording::diagnostic_commands;
 use tauri::Manager;
 use log::{info, error};
 
@@ -112,7 +112,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     
     println!("\n5. Full Diagnostic Report:");
-    match diagnostic_commands::run_recording_diagnostics(app_handle).await {
+    match diagnostic_commands::run_recording_diagnostics(app_handle.clone()).await {
         Ok(report) => {
             println!("   Overall health: {}", report.is_healthy());
             println!("   Auto-save status: {:?}", report.auto_save_status);
@@ -124,7 +124,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if !report.recommendations.is_empty() {
                 println!("   Recommendations:");
                 for rec in &report.recommendations {
-                    println!("     - {}", rec.description());
+                    println!("     - {:?}", rec);
                 }
             }
             

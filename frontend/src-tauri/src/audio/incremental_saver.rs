@@ -160,6 +160,12 @@ impl IncrementalAudioSaver {
     /// Returns the path to the final merged audio.mp4 file
     pub async fn finalize(&mut self) -> Result<PathBuf> {
         info!("Finalizing incremental recording...");
+        
+        // Requirement 7.5: Log recording finalization start
+        info!("🔧 [STRUCTURED_LOG] recording_finalization_start: {{ \"checkpoint_count\": {}, \"buffer_chunks_remaining\": {}, \"meeting_folder\": \"{}\" }}", 
+              self.checkpoint_count,
+              self.checkpoint_buffer.len(),
+              self.meeting_folder.display());
 
         // Save final buffer if not empty
         if !self.checkpoint_buffer.is_empty() {
@@ -169,6 +175,9 @@ impl IncrementalAudioSaver {
         }
 
         if self.checkpoint_count == 0 {
+            // Requirement 7.5: Log recording failure (no checkpoints)
+            error!("🔧 [STRUCTURED_LOG] recording_finalization_failed: {{ \"reason\": \"no_checkpoints\", \"meeting_folder\": \"{}\" }}", 
+                   self.meeting_folder.display());
             return Err(anyhow!("No audio checkpoints to merge - recording may have failed"));
         }
 
@@ -176,14 +185,40 @@ impl IncrementalAudioSaver {
         let final_audio_path = self.meeting_folder.join("audio.mp4");
         self.merge_checkpoints(&final_audio_path).await?;
 
+        // Get final file size and duration for comprehensive logging
+        let file_size_bytes = std::fs::metadata(&final_audio_path)
+            .map(|metadata| metadata.len())
+            .unwrap_or(0);
+        
+        let estimated_duration_seconds = (self.checkpoint_count as f64) * 30.0; // 30 seconds per checkpoint
+
         // Clean up checkpoints directory
         info!("Cleaning up {} checkpoint files", self.checkpoint_count);
         if let Err(e) = std::fs::remove_dir_all(&self.checkpoints_dir) {
             warn!("Failed to clean up checkpoints directory: {}", e);
             // Non-fatal - user can manually delete
+            
+            // Requirement 7.5: Log cleanup warning
+            warn!("🔧 [STRUCTURED_LOG] checkpoint_cleanup_warning: {{ \"checkpoints_directory\": \"{}\", \"error\": \"{}\" }}", 
+                  self.checkpoints_dir.display(),
+                  e.to_string().replace("\"", "\\\""));
+        } else {
+            // Requirement 7.5: Log successful cleanup
+            info!("🔧 [STRUCTURED_LOG] checkpoint_cleanup_success: {{ \"checkpoints_directory\": \"{}\", \"checkpoint_count\": {} }}", 
+                  self.checkpoints_dir.display(),
+                  self.checkpoint_count);
         }
 
         info!("Finalized recording: {}", final_audio_path.display());
+        
+        // Requirement 7.5: Log successful recording completion with comprehensive details
+        info!("🔧 [STRUCTURED_LOG] recording_finalization_success: {{ \"final_mp4_file\": \"{}\", \"file_size_bytes\": {}, \"file_size_mb\": {:.2}, \"checkpoint_count\": {}, \"estimated_duration_seconds\": {:.2}, \"meeting_folder\": \"{}\" }}", 
+              final_audio_path.display(),
+              file_size_bytes,
+              file_size_bytes as f64 / 1_048_576.0,
+              self.checkpoint_count,
+              estimated_duration_seconds,
+              self.meeting_folder.display());
 
         Ok(final_audio_path)
     }
@@ -220,16 +255,26 @@ impl IncrementalAudioSaver {
         // Run FFmpeg concat command
         // Using concat demuxer with copy codec for fast merging (no re-encoding)
         
-        let mut command = std::process::Command::new(ffmpeg_path);
+        let mut command = std::process::Command::new(&ffmpeg_path);
         
-        command.args(&[
+        let args = vec![
             "-f", "concat",          // Use concat demuxer
             "-safe", "0",            // Allow absolute paths
             "-i", list_file.to_str().unwrap(),
             "-c", "copy",            // Copy codec - no re-encoding!
             "-y",                    // Overwrite output file
             output.to_str().unwrap()
-        ]);
+        ];
+        
+        command.args(&args);
+
+        // Requirement 7.3: Log FFmpeg command before execution
+        info!("🔧 [STRUCTURED_LOG] ffmpeg_merge_command: {{ \"ffmpeg_path\": \"{}\", \"command\": \"ffmpeg {}\", \"checkpoint_count\": {}, \"output_file\": \"{}\", \"concat_list_file\": \"{}\" }}", 
+              ffmpeg_path.display(),
+              args.join(" "),
+              self.checkpoint_count,
+              output.display(),
+              list_file.display());
 
         // Hide console window on Windows to prevent CMD popup during finalization
         #[cfg(target_os = "windows")]
@@ -241,19 +286,61 @@ impl IncrementalAudioSaver {
 
         let ffmpeg_output = command.output()?;
 
+        // Requirement 7.3: Log FFmpeg output (stdout and stderr)
+        let stdout = String::from_utf8_lossy(&ffmpeg_output.stdout);
+        let stderr = String::from_utf8_lossy(&ffmpeg_output.stderr);
+        
+        if !stdout.is_empty() {
+            info!("🔧 [STRUCTURED_LOG] ffmpeg_merge_stdout: {{ \"output\": \"{}\" }}", 
+                  stdout.replace("\"", "\\\"").replace("\n", "\\n"));
+        }
+        
+        if !stderr.is_empty() {
+            // FFmpeg writes progress info to stderr, so log at info level unless there's an error
+            if ffmpeg_output.status.success() {
+                info!("🔧 [STRUCTURED_LOG] ffmpeg_merge_stderr: {{ \"output\": \"{}\" }}", 
+                      stderr.replace("\"", "\\\"").replace("\n", "\\n"));
+            } else {
+                error!("🔧 [STRUCTURED_LOG] ffmpeg_merge_error: {{ \"stderr\": \"{}\" }}", 
+                       stderr.replace("\"", "\\\"").replace("\n", "\\n"));
+            }
+        }
+
         if !ffmpeg_output.status.success() {
-            let stderr = String::from_utf8_lossy(&ffmpeg_output.stderr);
             error!("FFmpeg merge failed: {}", stderr);
+            
+            // Requirement 7.4: Log detailed error with component context
+            error!("🔧 [STRUCTURED_LOG] ffmpeg_merge_failed: {{ \"exit_code\": {}, \"checkpoint_count\": {}, \"output_file\": \"{}\", \"error_message\": \"{}\" }}", 
+                   ffmpeg_output.status.code().unwrap_or(-1),
+                   self.checkpoint_count,
+                   output.display(),
+                   stderr.replace("\"", "\\\"").replace("\n", "\\n"));
+            
             return Err(anyhow!("FFmpeg concat failed: {}", stderr));
         }
 
         // Verify output file was created
         if !output.exists() {
+            error!("🔧 [STRUCTURED_LOG] ffmpeg_merge_output_missing: {{ \"expected_output_file\": \"{}\", \"checkpoint_count\": {} }}", 
+                   output.display(),
+                   self.checkpoint_count);
             return Err(anyhow!("Merged audio file was not created: {}", output.display()));
         }
 
+        // Get final file size for logging
+        let file_size_bytes = std::fs::metadata(output)
+            .map(|metadata| metadata.len())
+            .unwrap_or(0);
+
         info!("Successfully merged {} checkpoints → {}",
               self.checkpoint_count, output.display());
+        
+        // Requirement 7.3: Log successful FFmpeg merge completion
+        info!("🔧 [STRUCTURED_LOG] ffmpeg_merge_success: {{ \"checkpoint_count\": {}, \"output_file\": \"{}\", \"output_file_size_bytes\": {}, \"output_file_size_mb\": {:.2} }}", 
+              self.checkpoint_count,
+              output.display(),
+              file_size_bytes,
+              file_size_bytes as f64 / 1_048_576.0);
 
         Ok(())
     }

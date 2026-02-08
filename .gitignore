@@ -75,6 +75,7 @@ node_modules/
 experiments/
 .cursor/
 target/
+.kiro/
 
 frontend/src-tauri/binaries/
 Cargo.lock

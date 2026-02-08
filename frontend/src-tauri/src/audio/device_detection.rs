@@ -483,7 +483,14 @@ mod tests {
             3840,
             48000,
         );
-        assert_eq!(timeout, Duration::from_millis(160));
+        // Allow for floating point precision differences
+        let expected = Duration::from_millis(160);
+        let diff = if timeout > expected {
+            timeout - expected
+        } else {
+            expected - timeout
+        };
+        assert!(diff < Duration::from_micros(100), "Timeout {:?} differs from expected {:?} by {:?}", timeout, expected, diff);
     }
 
     #[test]

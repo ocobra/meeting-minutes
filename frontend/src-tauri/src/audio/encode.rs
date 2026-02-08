@@ -33,32 +33,47 @@ pub fn encode_single_audio(
 
     debug!("Using FFmpeg at: {:?}", ffmpeg_path);
 
-    let mut command = Command::new(ffmpeg_path);
+    // Create string bindings for numeric values to avoid temporary value issues
+    let sample_rate_str = sample_rate.to_string();
+    let channels_str = channels.to_string();
+
+    let args = vec![
+        "-f",
+        "f32le",
+        "-ar",
+        &sample_rate_str,
+        "-ac",
+        &channels_str,
+        "-i",
+        "pipe:0",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k", // Increased from 64k for better audio quality (especially for speech)
+        "-profile:a",
+        "aac_low", // Use AAC-LC profile for better compatibility
+        "-movflags",
+        "+faststart", // Optimize for web streaming
+        "-f",
+        "mp4",
+        output_path.to_str().unwrap(),
+    ];
+
+    let mut command = Command::new(&ffmpeg_path);
     command
-        .args([
-            "-f",
-            "f32le",
-            "-ar",
-            &sample_rate.to_string(),
-            "-ac",
-            &channels.to_string(),
-            "-i",
-            "pipe:0",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k", // Increased from 64k for better audio quality (especially for speech)
-            "-profile:a",
-            "aac_low", // Use AAC-LC profile for better compatibility
-            "-movflags",
-            "+faststart", // Optimize for web streaming
-            "-f",
-            "mp4",
-            output_path.to_str().unwrap(),
-        ])
+        .args(&args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+
+    // Requirement 7.3: Log FFmpeg encode command before execution
+    log::info!("🔧 [STRUCTURED_LOG] ffmpeg_encode_command: {{ \"ffmpeg_path\": \"{}\", \"command\": \"ffmpeg {}\", \"input_bytes\": {}, \"sample_rate\": {}, \"channels\": {}, \"output_file\": \"{}\" }}", 
+              ffmpeg_path.display(),
+              args.join(" "),
+              data.len(),
+              sample_rate,
+              channels,
+              output_path.display());
 
     // Hide console window on Windows to prevent CMD popup during recording
     #[cfg(target_os = "windows")]
@@ -89,14 +104,51 @@ pub fn encode_single_audio(
     debug!("FFmpeg stdout: {}", stdout);
     debug!("FFmpeg stderr: {}", stderr);
 
+    // Requirement 7.3: Log FFmpeg output (stdout and stderr)
+    if !stdout.is_empty() {
+        log::info!("🔧 [STRUCTURED_LOG] ffmpeg_encode_stdout: {{ \"output\": \"{}\" }}", 
+                  stdout.replace("\"", "\\\"").replace("\n", "\\n"));
+    }
+    
+    if !stderr.is_empty() {
+        // FFmpeg writes progress info to stderr, so log at info level unless there's an error
+        if status.success() {
+            log::info!("🔧 [STRUCTURED_LOG] ffmpeg_encode_stderr: {{ \"output\": \"{}\" }}", 
+                      stderr.replace("\"", "\\\"").replace("\n", "\\n"));
+        } else {
+            log::error!("🔧 [STRUCTURED_LOG] ffmpeg_encode_error: {{ \"stderr\": \"{}\" }}", 
+                       stderr.replace("\"", "\\\"").replace("\n", "\\n"));
+        }
+    }
+
     if !status.success() {
         error!("FFmpeg process failed with status: {}", status);
         error!("FFmpeg stderr: {}", stderr);
+        
+        // Requirement 7.4: Log detailed error with component context
+        log::error!("🔧 [STRUCTURED_LOG] ffmpeg_encode_failed: {{ \"exit_code\": {}, \"input_bytes\": {}, \"output_file\": \"{}\", \"error_message\": \"{}\" }}", 
+                   status.code().unwrap_or(-1),
+                   data.len(),
+                   output_path.display(),
+                   stderr.replace("\"", "\\\"").replace("\n", "\\n"));
+        
         return Err(anyhow::anyhow!(
             "FFmpeg process failed with status: {}",
             status
         ));
     }
+
+    // Get final file size for logging
+    let file_size_bytes = std::fs::metadata(output_path)
+        .map(|metadata| metadata.len())
+        .unwrap_or(0);
+
+    // Requirement 7.3: Log successful FFmpeg encode completion
+    log::info!("🔧 [STRUCTURED_LOG] ffmpeg_encode_success: {{ \"output_file\": \"{}\", \"output_file_size_bytes\": {}, \"output_file_size_mb\": {:.2}, \"input_bytes\": {} }}", 
+              output_path.display(),
+              file_size_bytes,
+              file_size_bytes as f64 / 1_048_576.0,
+              data.len());
 
     Ok(())
 }
