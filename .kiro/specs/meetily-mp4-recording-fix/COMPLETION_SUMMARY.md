@@ -1,7 +1,28 @@
 # Meetily MP4 Recording Fix - Completion Summary
 
 ## Date: February 8, 2026
-## Status: ✅ COMPLETE
+## Status: ✅ COMPLETE + ROOT CAUSE RESOLVED
+
+## Root Cause Resolution
+
+**Issue**: MP4 files were not being saved despite `auto_save=true` preference and `.checkpoints` directory being created.
+
+**Root Cause**: FFmpeg was not installed on the system. The checkpoint saving process requires FFmpeg to encode raw audio data into MP4 format.
+
+**Solution Applied**:
+1. ✅ Installed FFmpeg 6.1.1 on the system
+2. ✅ Restarted Meetily application (PID: 277320)
+3. ✅ MP4 recording should now work correctly
+
+**Evidence**: Log analysis showed:
+```
+[2026-02-08T08:12:00Z ERROR] ❌ Checkpoint error: Failed to add audio chunk to 
+incremental saver: FFmpeg not found. Please install FFmpeg to save recordings.
+```
+
+**Graceful Degradation**: The system correctly switched to transcript-only mode when FFmpeg was missing, preserving transcript functionality while logging clear error messages.
+
+See `ROOT_CAUSE_ANALYSIS.md` for detailed technical analysis.
 
 ## Overview
 

@@ -163,7 +163,32 @@ impl RecordingSaver {
         if auto_save {
             if let Some(name) = self.meeting_name.clone() {
                 match self.initialize_meeting_folder(&name, true) {
-                    Ok(()) => info!("✅ Successfully initialized meeting folder with checkpoints"),
+                    Ok(()) => {
+                        info!("✅ Successfully initialized meeting folder with checkpoints");
+                        
+                        // CRITICAL: Verify that incremental_saver was actually initialized
+                        if self.incremental_saver.is_none() {
+                            error!("❌ CRITICAL: incremental_saver is None after successful initialization!");
+                            error!("❌ This will cause all audio chunks to be silently dropped!");
+                            error!("❌ MP4 recording will NOT work!");
+                            
+                            // Try to initialize again as a recovery attempt
+                            warn!("🔄 Attempting to re-initialize incremental saver...");
+                            if let Ok(meeting_folder) = super::audio_processing::get_meeting_folder(&super::recording_preferences::get_default_recordings_folder(), &name) {
+                                match IncrementalAudioSaver::new(meeting_folder.clone(), 48000) {
+                                    Ok(incremental_saver) => {
+                                        self.incremental_saver = Some(Arc::new(AsyncMutex::new(incremental_saver)));
+                                        info!("✅ Recovery successful: Incremental saver re-initialized");
+                                    }
+                                    Err(e) => {
+                                        error!("❌ Recovery failed: Could not re-initialize incremental saver: {}", e);
+                                    }
+                                }
+                            }
+                        } else {
+                            info!("✅ Verified: incremental_saver is properly initialized");
+                        }
+                    },
                     Err(e) => {
                         error!("❌ Failed to initialize meeting folder with checkpoints: {}", e);
                         error!("🔄 Attempting graceful degradation: transcript-only mode");
