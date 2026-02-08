@@ -2,7 +2,7 @@ use crate::api::{MeetingDetails, MeetingTranscript};
 use crate::database::models::{MeetingModel, Transcript};
 use chrono::Utc;
 use sqlx::{Connection, Error as SqlxError, SqliteConnection, SqlitePool};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 pub struct MeetingsRepository;
 
@@ -22,6 +22,28 @@ impl MeetingsRepository {
             ));
         }
 
+        // Query folder_path before starting the transaction
+        let folder_path: Option<String> = sqlx::query_scalar(
+            "SELECT folder_path FROM meetings WHERE id = ?"
+        )
+        .bind(meeting_id)
+        .fetch_optional(pool)
+        .await?;
+
+        // Log the retrieved folder_path
+        match &folder_path {
+            Some(path) if !path.is_empty() => {
+                info!("Retrieved folder_path for meeting {}: {}", meeting_id, path);
+            }
+            Some(path) if path.is_empty() => {
+                info!("Meeting {} has empty string folder_path, skipping filesystem deletion", meeting_id);
+            }
+            None => {
+                info!("Meeting {} has no folder_path, skipping filesystem deletion", meeting_id);
+            }
+            _ => {}
+        }
+
         let mut conn = pool.acquire().await?;
         let mut transaction = conn.begin().await?;
 
@@ -33,6 +55,14 @@ impl MeetingsRepository {
                         "Successfully deleted meeting {} and all associated data",
                         meeting_id
                     );
+                    
+                    // After successful database deletion, attempt to delete the filesystem folder
+                    if let Some(path) = folder_path {
+                        if !path.is_empty() {
+                            delete_meeting_folder(&path);
+                        }
+                    }
+                    
                     Ok(true)
                 } else {
                     transaction.rollback().await?;
@@ -271,4 +301,42 @@ async fn delete_meeting_with_transaction(
         .await?;
 
     Ok(result.rows_affected() > 0)
+}
+
+/// Helper function to delete a meeting folder from the filesystem
+/// 
+/// This function attempts to recursively delete a meeting folder and all its contents.
+/// It handles errors gracefully by logging them without panicking, ensuring that
+/// filesystem issues don't prevent database cleanup from succeeding.
+/// 
+/// # Arguments
+/// * `folder_path` - The absolute path to the meeting folder to delete
+/// 
+/// # Behavior
+/// - Checks if the folder exists before attempting deletion
+/// - Logs a warning if the folder doesn't exist (not an error)
+/// - Uses `std::fs::remove_dir_all()` for recursive deletion
+/// - Logs success when folder is deleted
+/// - Logs errors if deletion fails, but doesn't panic
+fn delete_meeting_folder(folder_path: &str) {
+    use std::fs;
+    use std::path::Path;
+    
+    let path = Path::new(folder_path);
+    
+    // Check if folder exists before attempting deletion
+    if !path.exists() {
+        warn!("Meeting folder does not exist, skipping deletion: {}", folder_path);
+        return;
+    }
+    
+    // Attempt to recursively delete the folder and all its contents
+    match fs::remove_dir_all(path) {
+        Ok(()) => {
+            info!("Successfully deleted meeting folder: {}", folder_path);
+        }
+        Err(e) => {
+            error!("Failed to delete meeting folder '{}': {}", folder_path, e);
+        }
+    }
 }
