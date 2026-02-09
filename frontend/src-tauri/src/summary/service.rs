@@ -344,11 +344,11 @@ impl SummaryService {
                 };
 
                 // Add comprehensive header to ALL summaries
-                // Format: "Meeting 2026-02-09_06-42-52 - Feb 9, 2026 6:42 AM EST - [LLM Generated] Title"
+                // Format: "Meeting February 9, 2026 at 7:49 AM EST - [LLM Generated Title]"
                 let header = if let Some(llm_title) = llm_title {
-                    format!("# Meeting {} - {} - {}\n\n", timestamp_filename, timestamp_display, llm_title)
+                    format!("# Meeting {} - {}\n\n", timestamp_display, llm_title)
                 } else {
-                    format!("# Meeting {} - {}\n\n", timestamp_filename, timestamp_display)
+                    format!("# Meeting {}\n\n", timestamp_display)
                 };
                 
                 info!("🕐 Adding summary header: '{}'", header.trim());
