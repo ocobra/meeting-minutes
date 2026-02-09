@@ -303,8 +303,9 @@ impl SummaryService {
                 // Extract and update meeting name if present
                 let llm_title = if let Some(name) = extract_meeting_name_from_markdown(&final_markdown) {
                     if !name.is_empty() {
-                        // Format: "Meeting-[LLM Title]-[Timestamp]"
-                        let formatted_title = format!("Meeting-{}-{}", name, timestamp_filename);
+                        // Format: "Meeting-<date>-[LLM Title]"
+                        let date_str = meeting_metadata.created_at.0.format("%Y-%m-%d").to_string();
+                        let formatted_title = format!("Meeting-{}-{}", date_str, name);
                         
                         info!(
                             "🕐 Updating meeting title to '{}' for meeting_id: {}",
