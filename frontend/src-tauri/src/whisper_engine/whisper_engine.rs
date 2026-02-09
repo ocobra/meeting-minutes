@@ -575,12 +575,12 @@ impl WhisperEngine {
         params.set_suppress_non_speech_tokens(true);
         params.set_temperature(adaptive_config.temperature);
         params.set_max_initial_ts(1.0);
-        params.set_entropy_thold(2.4);
-        params.set_logprob_thold(-1.0);
-        // BALANCED FIX: Lowered from 0.75 to 0.55 to allow quiet speech detection
-        // Previous value was too aggressive and rejected valid quiet speech
-        // 0.55 is balanced - prevents hallucinations while preserving quiet speech
-        params.set_no_speech_thold(0.55);
+        params.set_entropy_thold(2.0);     // TUNED: Lowered from 2.4 to 2.0 for higher quality
+        params.set_logprob_thold(-1.2);    // TUNED: Lowered from -1.0 to -1.2 for stricter filtering
+        // TUNED: Lowered from 0.55 to 0.45 to capture quieter speech
+        // This allows detection of softer voices and quiet speakers
+        // May increase sensitivity to background noise slightly
+        params.set_no_speech_thold(0.45);
         params.set_max_len(200);
         params.set_single_segment(false);
 
@@ -685,17 +685,16 @@ impl WhisperEngine {
         params.set_print_realtime(false);
         params.set_print_timestamps(false);
 
-        // BALANCED settings - good quality with reasonable speed
+        // TUNED: High-quality settings for maximum accuracy
         params.set_suppress_blank(true);
         params.set_suppress_non_speech_tokens(true);
-        params.set_temperature(0.3);             // Lower than 0.4 for consistency, higher than 0.0 for quality
+        params.set_temperature(adaptive_config.temperature);  // Use adaptive temperature (0.1 for quality)
         params.set_max_initial_ts(1.0);
-        params.set_entropy_thold(2.4);
-        params.set_logprob_thold(-1.0);
-        // BALANCED FIX: Lowered from 0.75 to 0.55 to allow quiet speech detection
-        // Previous value was too aggressive and rejected valid quiet speech
-        // 0.55 is balanced - prevents hallucinations while preserving quiet speech
-        params.set_no_speech_thold(0.55);
+        params.set_entropy_thold(2.0);         // TUNED: Lowered from 2.4 to 2.0 for higher quality
+        params.set_logprob_thold(-1.2);        // TUNED: Lowered from -1.0 to -1.2 for stricter filtering
+        // TUNED: Lowered from 0.55 to 0.45 to capture quieter speech
+        // This allows detection of softer voices and quiet speakers
+        params.set_no_speech_thold(0.45);
 
         // Reasonable length limits
         params.set_max_len(200);                 // Reasonable length

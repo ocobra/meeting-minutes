@@ -172,6 +172,18 @@ impl HardwareProfile {
 
     /// Generate adaptive Whisper configuration based on hardware
     pub fn get_whisper_config(&self) -> AdaptiveWhisperConfig {
+        // OVERRIDE: Force maximum quality settings for best transcription accuracy
+        // This prioritizes accuracy over speed
+        return AdaptiveWhisperConfig {
+            beam_size: 5,        // Maximum quality (was adaptive 1-5)
+            temperature: 0.1,    // Very conservative for accuracy (was adaptive 0.1-0.4)
+            use_gpu: self.has_gpu_acceleration,
+            max_threads: Some(self.cpu_cores.min(8) as usize),
+            chunk_size_preference: ChunkSizePreference::Quality,
+        };
+
+        // Original adaptive configuration commented out for reference
+        /*
         // Windows-specific override: Always use beam size 2 for stability
         #[cfg(target_os = "windows")]
         {
@@ -218,6 +230,7 @@ impl HardwareProfile {
                 },
             }
         }
+        */
     }
 
     /// Get recommended chunk duration in milliseconds based on performance tier
