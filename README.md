@@ -97,6 +97,7 @@ Whether you're a defense consultant, enterprise executive, legal professional, o
 - **Local First:** All processing is done on your machine. No data ever leaves your computer.
 - **Real-time Transcription:** Get a live transcript of your meeting as it happens.
 - **AI-Powered Summaries:** Generate summaries of your meetings using powerful language models.
+- **Timestamped Meetings:** Automatic date/time stamps in meeting titles and summaries for easy identification and organization.
 - **Multi-Platform:** Works on macOS, Windows, and Linux.
 - **Open Source:** Meetily is open source and free to use.
 - **Flexible AI Provider Support:** Choose from Ollama (local), Claude, Groq, OpenRouter, or use your own OpenAI-compatible endpoint.
