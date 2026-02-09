@@ -3,7 +3,7 @@ use crate::database::repositories::{
 };
 use crate::summary::llm_client::LLMProvider;
 use crate::summary::processor::{extract_meeting_name_from_markdown, generate_meeting_summary};
-use crate::utils::timestamp_formatter::{format_timestamp_for_summary, utc_to_local};
+use crate::utils::timestamp_formatter::{format_timestamp_for_summary, format_timestamp_for_filename, format_timestamp_for_title, utc_to_local};
 use crate::ollama::metadata::ModelMetadataCache;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
@@ -239,13 +239,18 @@ impl SummaryService {
         let local_time = utc_to_local(&meeting_metadata.created_at.0);
         let timestamp_str = format_timestamp_for_summary(&local_time);
         
+        info!("🕐 Meeting created_at: {:?}", meeting_metadata.created_at.0);
+        info!("🕐 Formatted timestamp for summary: '{}'", timestamp_str);
+        
         // Inject timestamp into prompt (prepend to custom_prompt)
         let timestamp_context = format!("Meeting Date and Time: {}\n\n", timestamp_str);
         let enhanced_prompt = if custom_prompt.is_empty() {
-            timestamp_context
+            timestamp_context.clone()
         } else {
             format!("{}{}", timestamp_context, custom_prompt)
         };
+        
+        info!("🕐 Enhanced prompt preview: '{}'", &enhanced_prompt[..enhanced_prompt.len().min(200)]);
 
         // Generate summary
         let client = reqwest::Client::new();
@@ -289,23 +294,31 @@ impl SummaryService {
                     "✓ Successfully processed {} chunks for meeting_id: {}. Duration: {:.2}s",
                     num_chunks, meeting_id, duration
                 );
-                info!("final markdown is {}", &final_markdown);
+
+                // Format timestamps for title and summary header
+                let local_time = utc_to_local(&meeting_metadata.created_at.0);
+                let timestamp_filename = format_timestamp_for_filename(&local_time);
+                let timestamp_display = format_timestamp_for_title(&local_time);
 
                 // Extract and update meeting name if present
-                if let Some(name) = extract_meeting_name_from_markdown(&final_markdown) {
+                let llm_title = if let Some(name) = extract_meeting_name_from_markdown(&final_markdown) {
                     if !name.is_empty() {
+                        // Format: "Meeting-[LLM Title]-[Timestamp]"
+                        let formatted_title = format!("Meeting-{}-{}", name, timestamp_filename);
+                        
                         info!(
-                            "Updating meeting name to '{}' for meeting_id: {}",
-                            name, meeting_id
+                            "🕐 Updating meeting title to '{}' for meeting_id: {}",
+                            formatted_title, meeting_id
                         );
+                        
                         if let Err(e) =
-                            MeetingsRepository::update_meeting_title(&pool, &meeting_id, &name).await
+                            MeetingsRepository::update_meeting_title(&pool, &meeting_id, &formatted_title).await
                         {
                             error!("Failed to update meeting name for {}: {}", meeting_id, e);
                         }
 
-                        // Strip the title line from markdown
-                        info!("Stripping title from final_markdown");
+                        // Strip the title line from markdown (we'll add our own header)
+                        info!("Stripping LLM-generated title from markdown");
                         if let Some(hash_pos) = final_markdown.find('#') {
                             // Find end of first line after '#'
                             let body_start =
@@ -320,8 +333,25 @@ impl SummaryService {
                             // No '#' found, clear the string
                             final_markdown.clear();
                         }
+                        
+                        Some(name)
+                    } else {
+                        None
                     }
-                }
+                } else {
+                    None
+                };
+
+                // Add comprehensive header to ALL summaries
+                // Format: "Meeting 2026-02-09_06-42-52 - Feb 9, 2026 6:42 AM EST - [LLM Generated] Title"
+                let header = if let Some(llm_title) = llm_title {
+                    format!("# Meeting {} - {} - {}\n\n", timestamp_filename, timestamp_display, llm_title)
+                } else {
+                    format!("# Meeting {} - {}\n\n", timestamp_filename, timestamp_display)
+                };
+                
+                info!("🕐 Adding summary header: '{}'", header.trim());
+                final_markdown = format!("{}{}", header, final_markdown);
 
                 // Create result JSON with markdown only (summary_json will be added on first edit)
                 let result_json = serde_json::json!({
