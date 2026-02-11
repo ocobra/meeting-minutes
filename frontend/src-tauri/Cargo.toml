@@ -36,7 +36,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 #   .\build-gpu.ps1 (Windows PowerShell)
 #
 [features]
-default = ["platform-default"]  # Automatically enables best backend per platform
+default = ["platform-default", "vulkan"]  # Automatically enables best backend per platform + Vulkan for diarization
 
 # Platform-appropriate defaults - see target-specific dependencies below
 platform-default = []
@@ -45,7 +45,7 @@ platform-default = []
 metal = ["whisper-rs/metal"]       # macOS: Apple Metal GPU (Auto-enabled on macOS)
 coreml = ["whisper-rs/coreml"]     # macOS: Apple CoreML acceleration
 cuda = ["whisper-rs/cuda"]         # Windows/Linux: NVIDIA CUDA GPU
-vulkan = ["whisper-rs/vulkan"]     # Windows/Linux: AMD/Intel Vulkan GPU
+vulkan = ["whisper-rs/vulkan"]     # Windows/Linux: AMD/Intel Vulkan GPU (REQUIRED for speaker diarization)
 hipblas = ["whisper-rs/hipblas"]   # Linux: AMD ROCm HIP
 
 # CPU optimizations (fallback for systems without GPU)
@@ -102,6 +102,14 @@ silero_rs = { git = "https://github.com/emotechlab/silero-rs", rev = "26a6460", 
 # Parakeet (ONNX-based fast transcription) dependencies
 ort = { version = "2.0.0-rc.10" }  # ONNX Runtime for Parakeet models
 thiserror = "2.0.16"                # Error handling for Parakeet
+
+# Speaker diarization dependencies
+# PyO3 for Python interop (pyannote.audio integration)
+# pyo3 = { version = "0.20", features = ["auto-initialize"] }
+# Note: PyO3 integration will be added in Task 3 when implementing the diarization engine
+
+# Cryptographic hashing for voice embeddings (privacy-compliant storage)
+sha2 = "0.10"
 
 # Async
 tokio = { version = "1.32.0", features = ["full", "tracing"] }

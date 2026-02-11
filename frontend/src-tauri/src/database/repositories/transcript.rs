@@ -1,5 +1,5 @@
 use crate::api::{TranscriptSearchResult, TranscriptSegment};
-use crate::utils::timestamp_formatter::{format_timestamp_for_title, utc_to_local};
+use crate::utils::timestamp_formatter::{format_timestamp_for_filename, utc_to_local};
 use chrono::Utc;
 use sqlx::{Connection, Error as SqlxError, SqlitePool};
 use tracing::{error, info};
@@ -24,19 +24,22 @@ impl TranscriptsRepository {
 
         let now = Utc::now();
 
-        // Format timestamp for title
+        // Format timestamp for initial title (filesystem-safe format)
         let local_time = utc_to_local(&now);
-        let timestamp_str = format_timestamp_for_title(&local_time);
+        let timestamp_str = format_timestamp_for_filename(&local_time);
         
-        // Append timestamp to title
-        let enhanced_title = format!("{} - {}", meeting_title, timestamp_str);
+        // Create initial title with timestamp: "Meeting-2024-01-15_14-30-52"
+        // This will be updated later by LLM to: "Meeting-[LLM Title]-2024-01-15_14-30-52"
+        let initial_title = format!("Meeting-{}", timestamp_str);
+        
+        info!("🕐 Creating meeting with initial title: '{}'", initial_title);
 
         // 1. Create the new meeting
         let result = sqlx::query(
             "INSERT INTO meetings (id, title, created_at, updated_at, folder_path) VALUES (?, ?, ?, ?, ?)",
         )
         .bind(&meeting_id)
-        .bind(&enhanced_title)
+        .bind(&initial_title)
         .bind(now)
         .bind(now)
         .bind(&folder_path)

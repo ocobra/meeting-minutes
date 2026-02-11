@@ -16,6 +16,11 @@ export interface Transcript {
   audio_start_time?: number; // Seconds from recording start (e.g., 125.3)
   audio_end_time?: number;   // Seconds from recording start (e.g., 128.6)
   duration?: number;          // Segment duration in seconds (e.g., 3.3)
+  // Speaker diarization fields
+  speaker_label?: string;     // e.g., "Speaker 1", "Speaker 2"
+  speaker_name?: string;      // Identified name if available
+  speaker_confidence?: number; // Confidence in speaker identification (0.0-1.0)
+  is_overlapping?: boolean;   // Whether multiple speakers are talking
 }
 
 export interface TranscriptUpdate {
@@ -107,4 +112,38 @@ export interface TranscriptSegmentData {
   endTime?: number; // audio_end_time in seconds
   text: string;
   confidence?: number;
+}
+
+// Speaker diarization types
+export interface SpeakerSegment {
+  speaker_label: string;
+  speaker_name?: string;
+  start_time: number;
+  end_time: number;
+  confidence: number;
+  embedding_hash?: string;
+}
+
+export interface SpeakerStatistics {
+  speaker_label: string;
+  speaker_name?: string;
+  speaking_time_seconds: number;
+  speaking_percentage: number;
+  turn_count: number;
+}
+
+export interface VoiceProfile {
+  id: string;
+  name: string;
+  embedding_hash: string;
+  created_at: string;
+  last_seen: string;
+  meeting_count: number;
+}
+
+export interface DiarizationConfig {
+  processing_mode: 'Batch' | 'RealTime';
+  privacy_mode: 'LocalOnly' | 'PreferExternal' | 'ExternalOnly';
+  confidence_threshold?: number;
+  enable_identification?: boolean;
 }

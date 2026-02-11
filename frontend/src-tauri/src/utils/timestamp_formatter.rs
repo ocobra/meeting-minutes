@@ -14,6 +14,20 @@ pub fn format_timestamp_for_title(dt: &DateTime<Local>) -> String {
     dt.format("%b %-d, %Y %-I:%M %p %Z").to_string()
 }
 
+/// Formats a DateTime for use in filenames and meeting IDs (filesystem-safe format)
+/// 
+/// Example: "2024-01-15_14-30-52"
+/// 
+/// # Arguments
+/// * `dt` - A DateTime in local timezone
+/// 
+/// # Returns
+/// A formatted string suitable for use in filenames and meeting identifiers
+pub fn format_timestamp_for_filename(dt: &DateTime<Local>) -> String {
+    // Format: "2024-01-15_14-30-52"
+    dt.format("%Y-%m-%d_%H-%M-%S").to_string()
+}
+
 /// Formats a DateTime for display in summaries (detailed format)
 /// 
 /// Example: "January 15, 2024 at 2:30 PM EST"
@@ -43,6 +57,23 @@ pub fn utc_to_local(utc_dt: &DateTime<Utc>) -> DateTime<Local> {
 mod tests {
     use super::*;
     use chrono::TimeZone;
+
+    #[test]
+    fn test_format_timestamp_for_filename() {
+        // Create a known UTC time: 2024-01-15 14:30:52 UTC
+        let utc_time = Utc.with_ymd_and_hms(2024, 1, 15, 14, 30, 52).unwrap();
+        let local_time = utc_to_local(&utc_time);
+        
+        let formatted = format_timestamp_for_filename(&local_time);
+        
+        // Should contain the date and time in filesystem-safe format
+        assert!(formatted.contains("2024"));
+        assert!(formatted.contains("-"));
+        assert!(formatted.contains("_"));
+        // Should not contain spaces or colons (filesystem-safe)
+        assert!(!formatted.contains(" "));
+        assert!(!formatted.contains(":"));
+    }
 
     #[test]
     fn test_format_timestamp_for_title() {

@@ -174,7 +174,7 @@ impl RecordingSaver {
                             
                             // Try to initialize again as a recovery attempt
                             warn!("🔄 Attempting to re-initialize incremental saver...");
-                            if let Ok(meeting_folder) = super::audio_processing::get_meeting_folder(&super::recording_preferences::get_default_recordings_folder(), &name) {
+                            if let Ok(meeting_folder) = super::audio_processing::create_meeting_folder(&super::recording_preferences::get_default_recordings_folder(), &name, false) {
                                 match IncrementalAudioSaver::new(meeting_folder.clone(), 48000) {
                                     Ok(incremental_saver) => {
                                         self.incremental_saver = Some(Arc::new(AsyncMutex::new(incremental_saver)));

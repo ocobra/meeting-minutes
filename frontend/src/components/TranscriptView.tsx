@@ -3,6 +3,7 @@
 import { Transcript } from '@/types';
 import { useEffect, useRef, useState } from 'react';
 import { ConfidenceIndicator } from './ConfidenceIndicator';
+import { SpeakerLabel } from './SpeakerLabel';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import { RecordingStatusBar } from './RecordingStatusBar';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -14,6 +15,8 @@ interface TranscriptViewProps {
   isProcessing?: boolean; // Is processing/finalizing transcription (hides "Listening..." indicator)
   isStopping?: boolean; // Is recording being stopped (provides immediate UI feedback)
   enableStreaming?: boolean; // Enable streaming effect for live transcription UX
+  meetingId?: string; // Meeting ID for speaker name updates
+  showSpeakers?: boolean; // Whether to show speaker labels
 }
 
 interface SpeechDetectedEvent {
@@ -104,7 +107,16 @@ function cleanStopWords(text: string): string {
   return cleanedText;
 }
 
-export const TranscriptView: React.FC<TranscriptViewProps> = ({ transcripts, isRecording = false, isPaused = false, isProcessing = false, isStopping = false, enableStreaming = false }) => {
+export const TranscriptView: React.FC<TranscriptViewProps> = ({ 
+  transcripts, 
+  isRecording = false, 
+  isPaused = false, 
+  isProcessing = false, 
+  isStopping = false, 
+  enableStreaming = false,
+  meetingId,
+  showSpeakers = false,
+}) => {
   const [speechDetected, setSpeechDetected] = useState(false);
 
   // Debug: Log the props to understand what's happening
@@ -305,6 +317,20 @@ export const TranscriptView: React.FC<TranscriptViewProps> = ({ transcripts, isR
                 </TooltipContent>
               </Tooltip>
               <div className="flex-1">
+                {/* Speaker Label */}
+                {showSpeakers && (transcript.speaker_label || transcript.speaker_name) && meetingId && (
+                  <div className="mb-1">
+                    <SpeakerLabel
+                      speakerLabel={transcript.speaker_label || 'Unknown'}
+                      speakerName={transcript.speaker_name}
+                      confidence={transcript.speaker_confidence}
+                      isOverlapping={transcript.is_overlapping}
+                      meetingId={meetingId}
+                      editable={!isRecording}
+                    />
+                  </div>
+                )}
+                
                 {isStreaming ? (
                   // Streaming transcript - show in bubble (full width)
                   <div className="bg-gray-100 border border-gray-200 rounded-lg px-3 py-2">

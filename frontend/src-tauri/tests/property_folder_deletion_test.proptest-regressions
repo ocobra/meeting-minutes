@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 930394169685061c4d1a73f6bd1d1217697bd90cc8635dfbb824cde3454e4cbe # shrinks to meeting_id = "aa0a00a0-a0aa-0a00-0aa0-0a00000a0000", folder_name = "a-0aA"
+cc 7e51f3edcf1bb5f9167c47d52eaf2b80dab590bb36786361b2171a9c2cc26840 # shrinks to meeting_id = "0aa0a0a0-0a0a-aaa0-0aa0-aa0aaa00a000", folder_name = "AaaaA"
+cc b69778b8755137daa6f1823f17f935b8970f691a3a3bc729ebbea66b6a925373 # shrinks to meeting_id = "0aaa00aa-a00a-a0a0-0aaa-aa0aaa0000aa", folder_name = "00AaA"

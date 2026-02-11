@@ -9,15 +9,18 @@ import { TranscriptSettings, TranscriptModelProps } from '@/components/Transcrip
 import { RecordingSettings } from '@/components/RecordingSettings';
 import { PreferenceSettings } from '@/components/PreferenceSettings';
 import { SummaryModelSettings } from '@/components/SummaryModelSettings';
+import { DiarizationSettings } from '@/components/DiarizationSettings';
 import { useConfig } from '@/contexts/ConfigContext';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Users } from 'lucide-react';
 
 // Tabs configuration (constant)
 const TABS = [
   { value: 'general', label: 'General', icon: Settings2 },
   { value: 'recording', label: 'Recordings', icon: Mic },
   { value: 'Transcriptionmodels', label: 'Transcription', icon: DatabaseIcon },
-  { value: 'summaryModels', label: 'Summary', icon: SparkleIcon }
+  { value: 'summaryModels', label: 'Summary', icon: SparkleIcon },
+  { value: 'speakers', label: 'Speakers', icon: Users }
 ] as const;
 
 export default function SettingsPage() {
@@ -121,6 +124,9 @@ export default function SettingsPage() {
             </TabsContent>
             <TabsContent value="summaryModels">
               <SummaryModelSettings />
+            </TabsContent>
+            <TabsContent value="speakers">
+              <DiarizationSettings />
             </TabsContent>
           </Tabs>
         </div>
