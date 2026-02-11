@@ -54,13 +54,31 @@ pub enum DeviceType {
 
 #[derive(Clone, Eq, PartialEq, Hash, Serialize, Debug)]
 pub struct AudioDevice {
+    /// Raw device identifier used for device operations
     pub name: String,
+    /// Human-readable display name
+    pub friendly_name: String,
     pub device_type: DeviceType,
 }
 
 impl AudioDevice {
     pub fn new(name: String, device_type: DeviceType) -> Self {
-        AudioDevice { name, device_type }
+        // Use raw name as friendly name by default (will be updated by friendly name generator)
+        let friendly_name = name.clone();
+        AudioDevice { 
+            name, 
+            friendly_name,
+            device_type 
+        }
+    }
+    
+    /// Create a new AudioDevice with both raw and friendly names
+    pub fn with_friendly_name(name: String, friendly_name: String, device_type: DeviceType) -> Self {
+        AudioDevice {
+            name,
+            friendly_name,
+            device_type,
+        }
     }
 
     pub fn from_name(name: &str) -> Result<Self> {

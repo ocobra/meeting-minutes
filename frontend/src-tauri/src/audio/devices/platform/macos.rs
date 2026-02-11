@@ -2,15 +2,20 @@ use anyhow::Result;
 use cpal::traits::{DeviceTrait, HostTrait};
 
 use crate::audio::devices::configuration::{AudioDevice, DeviceType};
+use crate::audio::devices::friendly_names::FriendlyNameGenerator;
 
 /// Configure macOS audio devices using ScreenCaptureKit and CoreAudio
 pub fn configure_macos_audio(host: &cpal::Host) -> Result<Vec<AudioDevice>> {
     let mut devices: Vec<AudioDevice> = Vec::new();
+    
+    // Create friendly name generator
+    let generator = FriendlyNameGenerator::new();
 
     // Existing macOS implementation
     for device in host.input_devices()? {
         if let Ok(name) = device.name() {
-            devices.push(AudioDevice::new(name, DeviceType::Input));
+            let friendly_name = generator.generate(&name, DeviceType::Input);
+            devices.push(AudioDevice::with_friendly_name(name, friendly_name, DeviceType::Input));
         }
     }
 
@@ -26,7 +31,8 @@ pub fn configure_macos_audio(host: &cpal::Host) -> Result<Vec<AudioDevice>> {
     for device in host.output_devices()? {
         if let Ok(name) = device.name() {
             if should_include_output_device(&name) {
-                devices.push(AudioDevice::new(name, DeviceType::Output));
+                let friendly_name = generator.generate(&name, DeviceType::Output);
+                devices.push(AudioDevice::with_friendly_name(name, friendly_name, DeviceType::Output));
             }
         }
     }

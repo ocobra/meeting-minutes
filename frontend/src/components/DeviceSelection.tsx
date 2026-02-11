@@ -11,6 +11,7 @@ import Analytics from '@/lib/analytics';
 
 export interface AudioDevice {
   name: string;
+  friendly_name: string;
   device_type: 'Input' | 'Output';
 }
 
@@ -299,8 +300,9 @@ export function DeviceSelection({ selectedDevices, onDeviceChange, disabled = fa
                 <SelectItem
                   key={device.name}
                   value={`${device.name} (${device.device_type.toLowerCase()})`}
+                  title={device.name}
                 >
-                  {device.name}
+                  {device.friendly_name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -318,8 +320,8 @@ export function DeviceSelection({ selectedDevices, onDeviceChange, disabled = fa
                 return (
                   <div key={`level-${device.name}`} className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-600 truncate max-w-[200px]">
-                        {device.name}
+                      <span className="text-xs text-gray-600 truncate max-w-[200px]" title={device.name}>
+                        {device.friendly_name}
                       </span>
                       {levelData && (
                         <CompactAudioLevelMeter
@@ -334,7 +336,7 @@ export function DeviceSelection({ selectedDevices, onDeviceChange, disabled = fa
                         rmsLevel={levelData.rms_level}
                         peakLevel={levelData.peak_level}
                         isActive={levelData.is_active}
-                        deviceName={device.name}
+                        deviceName={device.friendly_name}
                         size="small"
                       />
                     )}
@@ -368,8 +370,9 @@ export function DeviceSelection({ selectedDevices, onDeviceChange, disabled = fa
                 <SelectItem
                   key={device.name}
                   value={`${device.name} (${device.device_type.toLowerCase()})`}
+                  title={device.name}
                 >
-                  {device.name}
+                  {device.friendly_name}
                 </SelectItem>
               ))}
             </SelectContent>

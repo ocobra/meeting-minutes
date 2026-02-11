@@ -3,10 +3,14 @@ use cpal::traits::{DeviceTrait, HostTrait};
 use log::{debug, info, warn};
 
 use crate::audio::devices::configuration::{AudioDevice, DeviceType};
+use crate::audio::devices::friendly_names::FriendlyNameGenerator;
 
 /// Configure Windows audio devices using WASAPI
 pub fn configure_windows_audio(host: &cpal::Host) -> Result<Vec<AudioDevice>> {
     let mut devices = Vec::new();
+    
+    // Create friendly name generator
+    let generator = FriendlyNameGenerator::new();
 
     // Get WASAPI devices
     if let Ok(wasapi_host) = cpal::host_from_id(cpal::HostId::Wasapi) {
@@ -18,7 +22,8 @@ pub fn configure_windows_audio(host: &cpal::Host) -> Result<Vec<AudioDevice>> {
                 if let Ok(name) = device.name() {
                     // For Windows, we need to mark output devices specifically for loopback
                     // info!("Found Windows output device: {}", name);
-                    devices.push(AudioDevice::new(name.clone(), DeviceType::Output));
+                    let friendly_name = generator.generate(&name, DeviceType::Output);
+                    devices.push(AudioDevice::with_friendly_name(name, friendly_name, DeviceType::Output));
                 }
             }
         } else {
@@ -30,7 +35,8 @@ pub fn configure_windows_audio(host: &cpal::Host) -> Result<Vec<AudioDevice>> {
             for device in input_devices {
                 if let Ok(name) = device.name() {
                     // info!("Found Windows input device: {}", name);
-                    devices.push(AudioDevice::new(name.clone(), DeviceType::Input));
+                    let friendly_name = generator.generate(&name, DeviceType::Input);
+                    devices.push(AudioDevice::with_friendly_name(name, friendly_name, DeviceType::Input));
                 }
             }
         } else {
@@ -48,7 +54,8 @@ pub fn configure_windows_audio(host: &cpal::Host) -> Result<Vec<AudioDevice>> {
             for device in input_devices {
                 if let Ok(name) = device.name() {
                     // info!("Found fallback input device: {}", name);
-                    devices.push(AudioDevice::new(name.clone(), DeviceType::Input));
+                    let friendly_name = generator.generate(&name, DeviceType::Input);
+                    devices.push(AudioDevice::with_friendly_name(name, friendly_name, DeviceType::Input));
                 }
             }
         } else {
@@ -60,7 +67,8 @@ pub fn configure_windows_audio(host: &cpal::Host) -> Result<Vec<AudioDevice>> {
             for device in output_devices {
                 if let Ok(name) = device.name() {
                     // info!("Found fallback output device: {}", name);
-                    devices.push(AudioDevice::new(name.clone(), DeviceType::Output));
+                    let friendly_name = generator.generate(&name, DeviceType::Output);
+                    devices.push(AudioDevice::with_friendly_name(name, friendly_name, DeviceType::Output));
                 }
             }
         } else {
@@ -76,7 +84,8 @@ pub fn configure_windows_audio(host: &cpal::Host) -> Result<Vec<AudioDevice>> {
         if let Some(device) = host.default_input_device() {
             if let Ok(name) = device.name() {
                 // info!("Adding default input device: {}", name);
-                devices.push(AudioDevice::new(name, DeviceType::Input));
+                let friendly_name = generator.generate(&name, DeviceType::Input);
+                devices.push(AudioDevice::with_friendly_name(name, friendly_name, DeviceType::Input));
             }
         }
 
@@ -84,7 +93,8 @@ pub fn configure_windows_audio(host: &cpal::Host) -> Result<Vec<AudioDevice>> {
         if let Some(device) = host.default_output_device() {
             if let Ok(name) = device.name() {
                 // info!("Adding default output device: {}", name);
-                devices.push(AudioDevice::new(name, DeviceType::Output));
+                let friendly_name = generator.generate(&name, DeviceType::Output);
+                devices.push(AudioDevice::with_friendly_name(name, friendly_name, DeviceType::Output));
             }
         }
     }
