@@ -79,3 +79,6 @@ target/
 
 frontend/src-tauri/binaries/
 Cargo.lock
+
+# Security audit reports (may contain personal information)
+SECURITY_AUDIT_REPORT.md
