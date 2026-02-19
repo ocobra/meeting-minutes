@@ -47,7 +47,7 @@ sqlite3 ~/.local/share/com.meetily.ai/meeting_minutes.sqlite \
 
 **Provider**: gemini  
 **Model**: gemini-flash-latest  
-**API Key**: AIzaSyAbCFrYO9khsE_D3Psplq0zSfkDc4lWoeo  
+**API Key**: YOUR_GEMINI_API_KEY_HERE  
 **Endpoint**: https://generativelanguage.googleapis.com/v1beta/models/
 
 ## 🎯 Model Selection Guide

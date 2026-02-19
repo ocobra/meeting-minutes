@@ -10,7 +10,7 @@ import json
 import time
 
 # Database path
-DB_PATH = "/home/cokochu/.local/share/com.meetily.ai/meeting_minutes.sqlite"
+DB_PATH = "~/.local/share/com.meetily.ai/meeting_minutes.sqlite"
 
 def check_current_config():
     """Check current Meetily configuration"""
@@ -98,7 +98,7 @@ def check_builtin_ai_setup():
     
     # Check if llama-helper binary exists
     import os
-    llama_helper_path = "/home/cokochu/code/githubrepos/meeting-minutes/target/release/llama-helper"
+    llama_helper_path = os.path.expanduser("~/code/githubrepos/meeting-minutes/target/release/llama-helper")
     
     if os.path.exists(llama_helper_path):
         print(f"✅ llama-helper binary found: {llama_helper_path}")
@@ -111,7 +111,7 @@ def check_builtin_ai_setup():
         return False
     
     # Check if model file exists
-    model_path = "/home/cokochu/.local/share/com.meetily.ai/models/summary/gemma-3-1b-it-Q8_0.gguf"
+    model_path = os.path.expanduser("~/.local/share/com.meetily.ai/models/summary/gemma-3-1b-it-Q8_0.gguf")
     
     if os.path.exists(model_path):
         print(f"✅ Gemma 3 1B model found: {model_path}")

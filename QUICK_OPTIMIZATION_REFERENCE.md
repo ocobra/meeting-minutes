@@ -44,8 +44,8 @@ Channels: Mono
 
 ```bash
 # Add to ~/.bashrc
-export HUGGINGFACE_API_KEY="hf_your_token_here"
-export GEMINI_API_KEY="your_gemini_key_here"
+export HUGGINGFACE_API_KEY="YOUR_HUGGINGFACE_API_KEY_HERE"
+export GEMINI_API_KEY="YOUR_GEMINI_API_KEY_HERE"
 
 # Get keys from:
 # - Hugging Face: https://huggingface.co/settings/tokens

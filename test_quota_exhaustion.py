@@ -10,7 +10,7 @@ import subprocess
 import os
 
 # Database path
-DB_PATH = "/home/cokochu/.local/share/com.meetily.ai/meeting_minutes.sqlite"
+DB_PATH = "~/.local/share/com.meetily.ai/meeting_minutes.sqlite"
 
 def backup_api_key():
     """Backup the current API key"""
@@ -47,7 +47,7 @@ def test_fallback_with_curl():
     
     # Set environment variable for llama-helper
     env = os.environ.copy()
-    env['MEETILY_LLAMA_HELPER'] = '/home/cokochu/code/githubrepos/meeting-minutes/target/release/llama-helper'
+    env['MEETILY_LLAMA_HELPER'] = os.path.expanduser('~/code/githubrepos/meeting-minutes/target/release/llama-helper')
     
     # Test with a simple curl request to Gemini API with invalid key
     test_payload = '''

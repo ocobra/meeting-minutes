@@ -89,8 +89,8 @@ Enable Name Identification: ON
 
 **Critical**: Set up external API keys to offload processing:
 ```bash
-export HUGGINGFACE_API_KEY="hf_your_token_here"
-export GEMINI_API_KEY="your_gemini_key_here"
+export HUGGINGFACE_API_KEY="YOUR_HUGGINGFACE_API_KEY_HERE"
+export GEMINI_API_KEY="YOUR_GEMINI_API_KEY_HERE"
 ```
 
 **Note**: Gemini is now the recommended LLM for speaker name identification (same API key used for summaries).
@@ -267,8 +267,8 @@ cd frontend/src-tauri/python
 
 ```bash
 # Add to ~/.bashrc or ~/.zshrc for persistence
-echo 'export HUGGINGFACE_API_KEY="hf_your_token_here"' >> ~/.bashrc
-echo 'export GEMINI_API_KEY="your_gemini_key_here"' >> ~/.bashrc
+echo 'export HUGGINGFACE_API_KEY="YOUR_HUGGINGFACE_API_KEY_HERE"' >> ~/.bashrc
+echo 'export GEMINI_API_KEY="YOUR_GEMINI_API_KEY_HERE"' >> ~/.bashrc
 source ~/.bashrc
 ```
 

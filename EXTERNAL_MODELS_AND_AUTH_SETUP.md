@@ -72,7 +72,7 @@ To use external models for better accuracy and performance, you need to set up A
 
 2. **Set Environment Variable**:
    ```bash
-   export GEMINI_API_KEY="your_gemini_key_here"
+   export GEMINI_API_KEY="YOUR_GEMINI_API_KEY_HERE"
    ```
 
 3. **Restart Application**:
@@ -163,7 +163,7 @@ To use external models for better accuracy and performance, you need to set up A
 
 2. **Set Environment Variable**:
    ```bash
-   export ANTHROPIC_API_KEY="sk-ant-your_key_here"
+   export ANTHROPIC_API_KEY="YOUR_ANTHROPIC_API_KEY_HERE"
    ```
 
 3. **Restart Application**:
@@ -179,7 +179,7 @@ To use external models for better accuracy and performance, you need to set up A
 
 2. **Set Environment Variable**:
    ```bash
-   export ANTHROPIC_API_KEY="sk-ant-your_key_here"
+   export ANTHROPIC_API_KEY="YOUR_ANTHROPIC_API_KEY_HERE"
    ```
 
 3. **Restart Application**:
@@ -376,8 +376,8 @@ Benefits:
 2. Get Hugging Face API key: https://huggingface.co/settings/tokens
 3. Set environment variables:
    ```bash
-   export GEMINI_API_KEY="your_gemini_key_here"
-   export HUGGINGFACE_API_KEY="hf_..."
+   export GEMINI_API_KEY="YOUR_GEMINI_API_KEY_HERE"
+   export HUGGINGFACE_API_KEY="YOUR_HUGGINGFACE_API_KEY_HERE"
    ```
 4. Restart Meetily
 

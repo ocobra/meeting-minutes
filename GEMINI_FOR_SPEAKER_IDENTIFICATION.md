@@ -73,7 +73,7 @@ I've just added Gemini support to the speaker identification router. Gemini is n
 
 ```bash
 # Add to ~/.bashrc for persistence
-echo 'export GEMINI_API_KEY="your_gemini_key_here"' >> ~/.bashrc
+echo 'export GEMINI_API_KEY="YOUR_GEMINI_API_KEY_HERE"' >> ~/.bashrc
 source ~/.bashrc
 
 # Verify it's set
@@ -135,7 +135,7 @@ For optimal performance with minimal cost:
 export HUGGINGFACE_API_KEY="hf_your_token_here"
 
 # Speaker identification + summaries (text analysis)
-export GEMINI_API_KEY="your_gemini_key_here"
+export GEMINI_API_KEY="YOUR_GEMINI_API_KEY_HERE"
 ```
 
 **Total Cost**: $0/month (free tiers) or $9/month (HF Pro for unlimited diarization)

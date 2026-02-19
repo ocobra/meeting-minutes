@@ -62,7 +62,7 @@ Create `backend/.env`:
 
 ```bash
 # Backend Configuration
-DATABASE_URL=sqlite:///home/user/.local/share/meetily/meetily.db
+DATABASE_URL=sqlite:///~/.local/share/meetily/meetily.db
 API_HOST=0.0.0.0
 API_PORT=8000
 DEBUG=false
@@ -321,7 +321,7 @@ Create `~/.ollama/config.json`:
 ```json
 {
   "host": "0.0.0.0:11434",
-  "models_path": "/home/user/.ollama/models",
+  "models_path": "~/.ollama/models",
   "max_loaded_models": 3,
   "gpu_memory_fraction": 0.8,
   "log_level": "info",
@@ -337,7 +337,7 @@ For systems with GPU acceleration:
 ```json
 {
   "host": "0.0.0.0:11434",
-  "models_path": "/home/user/.ollama/models",
+  "models_path": "~/.ollama/models",
   "max_loaded_models": 2,
   "gpu_memory_fraction": 0.9,
   "gpu_layers": -1,
@@ -356,7 +356,7 @@ Create `/etc/systemd/system/ollama.service.d/override.conf`:
 ```ini
 [Service]
 Environment="OLLAMA_HOST=0.0.0.0:11434"
-Environment="OLLAMA_MODELS=/home/user/.ollama/models"
+Environment="OLLAMA_MODELS=~/.ollama/models"
 Environment="OLLAMA_MAX_LOADED_MODELS=3"
 Environment="OLLAMA_GPU_MEMORY_FRACTION=0.8"
 Environment="OLLAMA_NUM_PARALLEL=2"
@@ -872,7 +872,7 @@ User=meetily
 Group=meetily
 WorkingDirectory=/opt/meetily/backend
 Environment=PATH=/opt/meetily/backend/venv/bin
-Environment=DATABASE_URL=sqlite:///home/meetily/.local/share/meetily/meetily.db
+Environment=DATABASE_URL=sqlite:///var/lib/meetily/meetily.db
 Environment=OLLAMA_BASE_URL=http://localhost:11434
 EnvironmentFile=/etc/meetily/backend.env
 ExecStart=/opt/meetily/backend/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
@@ -888,7 +888,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/home/meetily/.local/share/meetily
+ReadWritePaths=/var/lib/meetily
 ReadWritePaths=/tmp
 
 # Resource limits
@@ -912,9 +912,9 @@ After=network.target
 Type=simple
 User=ollama
 Group=ollama
-WorkingDirectory=/home/ollama
+WorkingDirectory=/var/lib/ollama
 Environment=OLLAMA_HOST=0.0.0.0:11434
-Environment=OLLAMA_MODELS=/home/ollama/.ollama/models
+Environment=OLLAMA_MODELS=/var/lib/ollama/models
 Environment=OLLAMA_MAX_LOADED_MODELS=2
 Environment=OLLAMA_GPU_MEMORY_FRACTION=0.8
 Environment=CUDA_VISIBLE_DEVICES=0
@@ -930,7 +930,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/home/ollama/.ollama
+ReadWritePaths=/var/lib/ollama
 
 # Resource limits
 LimitNOFILE=65536
@@ -1142,7 +1142,7 @@ Create `/etc/meetily/backend.env`:
 ```bash
 # Production Backend Configuration
 DEBUG=false
-DATABASE_URL=sqlite:///home/meetily/.local/share/meetily/meetily.db
+DATABASE_URL=sqlite:///var/lib/meetily/meetily.db
 API_HOST=0.0.0.0
 API_PORT=8000
 
