@@ -30,7 +30,7 @@
 ## ✅ Verification Results
 
 ### 1. Gemini API Key
-- ✅ Set: `AIzaSyAFfPAphjPlXN_j...`
+- ✅ Set: `YOUR_GEMINI_API_KEY_HERE`
 - ✅ Added to `~/.bashrc` for persistence
 - ✅ Will be available on next login
 
@@ -154,7 +154,7 @@ tail -f ~/.local/share/meetily/logs/*.log | grep -i gemini
 export HUGGINGFACE_API_KEY="hf_your_token_here"  # Optional, $0-9/month
 
 # Speaker identification + summaries (text analysis)
-export GEMINI_API_KEY="AIzaSyAFfPAphjPlXN_j9if-XVLhrH6GxW4GvD8"  # Free!
+export GEMINI_API_KEY="YOUR_GEMINI_API_KEY_HERE"  # Free!
 ```
 
 **Total Cost**: $0/month (free tiers) or $9/month (HF Pro for unlimited)
